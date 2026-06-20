@@ -2,6 +2,7 @@ import os
 import tkinter as tk
 from tkinter import filedialog
 import customtkinter as ctk
+from version import __version__
 
 # Configure global CustomTkinter settings
 ctk.set_appearance_mode("Dark")
@@ -81,7 +82,7 @@ class YafwApp(ctk.CTk):
         
         subtitle_label = ctk.CTkLabel(
             header_frame, 
-            text="Yet Another FFmpeg Wrapper v1.1.5 • Lecture & Zoom Optimizer", 
+            text=f"Yet Another FFmpeg Wrapper v{__version__} • Lecture & Zoom Optimizer", 
             font=ctk.CTkFont(family="Inter", size=12),
             text_color=TEXT_MUTED
         )
@@ -410,6 +411,7 @@ class YafwApp(ctk.CTk):
             bg_color=CARD_BG,
             command=self.toggle_intro_image_settings
         )
+        self.intro_switch.select()  # Default ON
         self.intro_switch.grid(row=0, column=0, columnspan=3, sticky="w", padx=16, pady=(12, 8))
         
         # Row 1: File Picker Button
@@ -421,8 +423,7 @@ class YafwApp(ctk.CTk):
             fg_color=BG_COLOR,
             hover_color=BORDER_COLOR,
             corner_radius=8,
-            command=self.browse_intro_image,
-            state="disabled"
+            command=self.browse_intro_image
         )
         self.intro_picker_btn.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(16, 8), pady=(0, 12))
         
@@ -438,7 +439,6 @@ class YafwApp(ctk.CTk):
             text_color=TEXT_COLOR,
             font=ctk.CTkFont(family="Inter", size=12),
             corner_radius=8,
-            state="disabled",
             width=180
         )
         self.intro_scale_menu.set("Scale to Fit (No Crop)")
@@ -447,7 +447,7 @@ class YafwApp(ctk.CTk):
     def browse_intro_image(self):
         file_path = filedialog.askopenfilename(
             title="Select Intro Image",
-            filetypes=[("Image files", "*.png *.jpg *.jpeg *.webp"), ("All files", "*.*")]
+            filetypes=[("Image files", "*.png *.jpg *.jpeg *.jfif *.gif *.webp"), ("All files", "*.*")]
         )
         if file_path:
             self.intro_image_path = file_path

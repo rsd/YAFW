@@ -1,8 +1,66 @@
 import os
+import re
 import sys
 import urllib.request
 import zipfile
 import subprocess
+
+def read_version():
+    """
+    Reads the current version from version.py.
+
+    Returns:
+        The version string (e.g. "1.1.5").
+    """
+    with open("version.py", "r") as f:
+        content = f.read()
+    match = re.search(r'__version__\s*=\s*"([^"]+)"', content)
+    if not match:
+        print("[YAFW Build] Error: Could not parse version from version.py")
+        sys.exit(1)
+    return match.group(1)
+
+def bump_patch_version(version_str):
+    """
+    Increments the patch component of a semantic version string.
+
+    Args:
+        version_str: A version string in "major.minor.patch" format.
+
+    Returns:
+        The bumped version string.
+    """
+    parts = version_str.split(".")
+    parts[-1] = str(int(parts[-1]) + 1)
+    return ".".join(parts)
+
+def write_version(new_version):
+    """
+    Writes the new version back to version.py.
+
+    Args:
+        new_version: The new version string to write.
+    """
+    with open("version.py", "w") as f:
+        f.write(f'__version__ = "{new_version}"\n')
+    print(f"[YAFW Build] Bumped version.py to {new_version}")
+
+def update_setup_iss(new_version):
+    """
+    Updates AppVersion and OutputBaseFilename in setup.iss to include the new version.
+
+    Args:
+        new_version: The version string to embed.
+    """
+    with open("setup.iss", "r") as f:
+        content = f.read()
+
+    content = re.sub(r'AppVersion=.*', f'AppVersion={new_version}', content)
+    content = re.sub(r'OutputBaseFilename=.*', f'OutputBaseFilename=YAFW_Setup_{new_version}', content)
+
+    with open("setup.iss", "w") as f:
+        f.write(content)
+    print(f"[YAFW Build] Updated setup.iss to version {new_version}")
 
 def download_ffmpeg_binaries():
     """
@@ -74,13 +132,21 @@ def run_docker_builds():
 
     try:
         subprocess.run(innosetup_cmd, check=True)
-        print("[YAFW Build] Build succeeded! The installer is located at dist-installer/YAFW_Setup.exe")
+        new_version = read_version()
+        print(f"[YAFW Build] Build succeeded! Installer: dist-installer/YAFW_Setup_{new_version}.exe")
         return True
     except subprocess.CalledProcessError as e:
         print(f"[YAFW Build] Inno Setup compilation failed: {e}")
         return False
 
 if __name__ == "__main__":
+    # Step 0: Auto-increment patch version
+    current_version = read_version()
+    new_version = bump_patch_version(current_version)
+    write_version(new_version)
+    update_setup_iss(new_version)
+    print(f"[YAFW Build] Building YAFW v{new_version}")
+
     if not download_ffmpeg_binaries():
         sys.exit(1)
         
