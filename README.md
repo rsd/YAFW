@@ -12,7 +12,6 @@ YAFW is a premium, lightweight desktop utility designed to optimize long-form ta
 - **Pitch-Preserved Speedup**: Speeds up active video sections to 1.2x while preserving original voice pitch using FFmpeg's `atempo` filter.
 - **Voice Boost (Dynamic Audio Normalization)**: Levels speech volumes automatically (utilizing FFmpeg's `dynaudnorm` filter) so quiet student comments and loud lectures match comfortable listening levels.
 - **H.265 (HEVC) Compression**: Defaults to H.265 CPU encoding with a Constant Rate Factor (CRF) of 26, optimal for slide presentations (visually lossless text with file size reductions up to 90%).
-- **Single-Pass Pipeline**: Generates an Edit Decision List (EDL) and compiles it into a single, complex FFmpeg filtergraph script. The cutting, speed adjustment, audio normalization, and transcoding happen in one pass to avoid massive intermediate files and save CPU cycles.
 - **Zero-Setup Portability**: Leverages `static-ffmpeg` to automatically fetch, verify, and bundle static platform-specific FFmpeg/FFprobe binaries on the first run.
 
 ---
