@@ -264,6 +264,7 @@ class VideoProcessorThread(threading.Thread):
                     self.input_path,
                     "--edit", f"audio:threshold={threshold}",
                     "--margin", f"{margin}s",
+                    "--no-open",
                     "-o", temp_edited_path
                 ]
                 
@@ -371,9 +372,6 @@ class VideoProcessorThread(threading.Thread):
                             time_us = float(line.split("=")[1].strip())
                             current_sec = time_us / 1000000.0
                             
-                            sys.stdout.write(line)
-                            sys.stdout.flush()
-
                             dur_limit = edited_duration if edited_duration > 0.0 else total_duration
                             pass2_ratio = min(1.0, max(0.0, current_sec / dur_limit))
                             overall_pct = 70 + int(pass2_ratio * 28) # Map 70% to 98%
@@ -456,9 +454,6 @@ class VideoProcessorThread(threading.Thread):
                             time_us = float(line.split("=")[1].strip())
                             current_sec = time_us / 1000000.0
                             
-                            sys.stdout.write(line)
-                            sys.stdout.flush()
-
                             dur_limit = expected_output_duration if expected_output_duration > 0.0 else total_duration
                             ratio = min(1.0, max(0.0, current_sec / dur_limit))
                             overall_pct = 10 + int(ratio * 88) # Map 10% to 98%
