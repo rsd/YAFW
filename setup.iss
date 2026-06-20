@@ -25,7 +25,7 @@ Source: "dist\YAFW\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\YAFW Video Optimizer"; Filename: "{app}\YAFW.exe"
-Name: "{group}\{cm:UninstallProgram,YAFW Video Optimizer}"; Filename: "{uninstaller}"
+Name: "{group}\{cm:UninstallProgram,YAFW Video Optimizer}"; Filename: "{uninstexe}"
 Name: "{autodesktop}\YAFW Video Optimizer"; Filename: "{app}\YAFW.exe"; Tasks: desktopicon
 
 [Run]
