@@ -1,0 +1,33 @@
+# Python Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS Metadata
+.DS_Store
+Thumbs.db
+
+# Project Temp Files
+*.v3
+filter_graph.txt
+temp_timeline.json
+test_timeline.json
+test_timeline.v3
+
+# Media output testing files
+sample_input.mp4
+sample_output.mp4
+optimized_*.mp4
+out.mp4
+output.mp4
+
+# PyInstaller distribution files
+build/
+dist/
+*.spec
