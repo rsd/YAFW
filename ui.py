@@ -88,6 +88,7 @@ class YafwApp(ctk.CTk):
         self.picker_frame = ctk.CTkFrame(
             self.main_container, 
             fg_color=CARD_BG, 
+            bg_color=BG_COLOR,
             border_color=BORDER_COLOR, 
             border_width=1,
             corner_radius=12,
@@ -102,9 +103,10 @@ class YafwApp(ctk.CTk):
         self.picker_btn = ctk.CTkButton(
             self.picker_frame,
             text="Select Video File\n(Click to browse movies)",
-            font=ctk.CTkFont(family="Inter", size=14, weight="medium"),
+            font=ctk.CTkFont(family="Inter", size=14, weight="normal"),
             text_color=TEXT_COLOR,
             fg_color="transparent",
+            bg_color=CARD_BG,
             hover_color=BORDER_COLOR,
             corner_radius=12,
             command=self.browse_file
@@ -113,45 +115,45 @@ class YafwApp(ctk.CTk):
 
     def create_option_cards(self):
         # Frame containing three option blocks side by side
-        options_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        options_frame = ctk.CTkFrame(self.main_container, fg_color=BG_COLOR)
         options_frame.grid(row=2, column=0, sticky="ew", pady=(0, 16))
         
         # Configure columns equally
         options_frame.grid_columnconfigure((0, 1, 2), weight=1, uniform="equal")
         
         # Card 1: Cut Silences
-        self.card_cut = ctk.CTkFrame(options_frame, fg_color=CARD_BG, border_color=BORDER_COLOR, border_width=1, corner_radius=10)
+        self.card_cut = ctk.CTkFrame(options_frame, fg_color=CARD_BG, bg_color=BG_COLOR, border_color=BORDER_COLOR, border_width=1, corner_radius=10)
         self.card_cut.grid(row=0, column=0, padx=(0, 8), sticky="nsew")
         self.card_cut.grid_columnconfigure(0, weight=1)
-        self.cut_label = ctk.CTkLabel(self.card_cut, text="Cut Silences", font=ctk.CTkFont(family="Inter", size=13, weight="semibold"), text_color=TEXT_COLOR)
+        self.cut_label = ctk.CTkLabel(self.card_cut, text="Cut Silences", font=ctk.CTkFont(family="Inter", size=13, weight="bold"), text_color=TEXT_COLOR, bg_color=CARD_BG)
         self.cut_label.grid(row=0, column=0, pady=(12, 4))
-        self.cut_switch = ctk.CTkSwitch(self.card_cut, text="", progress_color=ACCENT_COLOR, fg_color="#3a3a44", command=self.toggle_cut_settings)
+        self.cut_switch = ctk.CTkSwitch(self.card_cut, text="", progress_color=ACCENT_COLOR, fg_color="#3a3a44", bg_color=CARD_BG, width=45, command=self.toggle_cut_settings)
         self.cut_switch.select() # Default ON
         self.cut_switch.grid(row=1, column=0, pady=(0, 12))
         
         # Card 2: Speed Up 1.2x
-        self.card_speed = ctk.CTkFrame(options_frame, fg_color=CARD_BG, border_color=BORDER_COLOR, border_width=1, corner_radius=10)
+        self.card_speed = ctk.CTkFrame(options_frame, fg_color=CARD_BG, bg_color=BG_COLOR, border_color=BORDER_COLOR, border_width=1, corner_radius=10)
         self.card_speed.grid(row=0, column=1, padx=4, sticky="nsew")
         self.card_speed.grid_columnconfigure(0, weight=1)
-        self.speed_label = ctk.CTkLabel(self.card_speed, text="Speed Up (1.2x)", font=ctk.CTkFont(family="Inter", size=13, weight="semibold"), text_color=TEXT_COLOR)
+        self.speed_label = ctk.CTkLabel(self.card_speed, text="Speed Up (1.2x)", font=ctk.CTkFont(family="Inter", size=13, weight="bold"), text_color=TEXT_COLOR, bg_color=CARD_BG)
         self.speed_label.grid(row=0, column=0, pady=(12, 4))
-        self.speed_switch = ctk.CTkSwitch(self.card_speed, text="", progress_color=ACCENT_COLOR, fg_color="#3a3a44")
+        self.speed_switch = ctk.CTkSwitch(self.card_speed, text="", progress_color=ACCENT_COLOR, fg_color="#3a3a44", bg_color=CARD_BG, width=45)
         self.speed_switch.select() # Default ON
         self.speed_switch.grid(row=1, column=0, pady=(0, 12))
         
         # Card 3: Voice Boost
-        self.card_boost = ctk.CTkFrame(options_frame, fg_color=CARD_BG, border_color=BORDER_COLOR, border_width=1, corner_radius=10)
+        self.card_boost = ctk.CTkFrame(options_frame, fg_color=CARD_BG, bg_color=BG_COLOR, border_color=BORDER_COLOR, border_width=1, corner_radius=10)
         self.card_boost.grid(row=0, column=2, padx=(8, 0), sticky="nsew")
         self.card_boost.grid_columnconfigure(0, weight=1)
-        self.boost_label = ctk.CTkLabel(self.card_boost, text="Voice Boost", font=ctk.CTkFont(family="Inter", size=13, weight="semibold"), text_color=TEXT_COLOR)
+        self.boost_label = ctk.CTkLabel(self.card_boost, text="Voice Boost", font=ctk.CTkFont(family="Inter", size=13, weight="bold"), text_color=TEXT_COLOR, bg_color=CARD_BG)
         self.boost_label.grid(row=0, column=0, pady=(12, 4))
-        self.boost_switch = ctk.CTkSwitch(self.card_boost, text="", progress_color=ACCENT_COLOR, fg_color="#3a3a44")
+        self.boost_switch = ctk.CTkSwitch(self.card_boost, text="", progress_color=ACCENT_COLOR, fg_color="#3a3a44", bg_color=CARD_BG, width=45)
         self.boost_switch.select() # Default ON
         self.boost_switch.grid(row=1, column=0, pady=(0, 12))
 
     def create_noise_preset_menu(self):
         # Simple dropdown configuration for noise levels
-        self.preset_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
+        self.preset_frame = ctk.CTkFrame(self.main_container, fg_color=BG_COLOR)
         self.preset_frame.grid(row=3, column=0, sticky="ew", pady=(0, 20))
         self.preset_frame.grid_columnconfigure(1, weight=1)
         
@@ -159,7 +161,8 @@ class YafwApp(ctk.CTk):
             self.preset_frame, 
             text="Noise Sensitivity Preset:", 
             font=ctk.CTkFont(family="Inter", size=13),
-            text_color=TEXT_COLOR
+            text_color=TEXT_COLOR,
+            bg_color=BG_COLOR
         )
         preset_label.grid(row=0, column=0, sticky="w", padx=(0, 12))
         
@@ -167,6 +170,7 @@ class YafwApp(ctk.CTk):
             self.preset_frame,
             values=["Quiet Room (Low -35dB)", "Normal Room (Medium -30dB)", "Noisy Room (High -25dB)"],
             fg_color=CARD_BG,
+            bg_color=BG_COLOR,
             button_color=BORDER_COLOR,
             button_hover_color=ACCENT_COLOR,
             dropdown_fg_color=CARD_BG,
@@ -176,16 +180,15 @@ class YafwApp(ctk.CTk):
             corner_radius=8
         )
         self.preset_menu.set("Normal Room (Medium -30dB)")
-        self.preset_menu.grid(row=0, column=1, sticky="ew")
-
-    def create_advanced_settings(self):
+        self.preset_menu.grid(row=0, column=1, sticky="ew")    def create_advanced_settings(self):
         # Header button to toggle view
         self.advanced_header = ctk.CTkButton(
             self.main_container,
             text="▼ Advanced Settings",
-            font=ctk.CTkFont(family="Inter", size=13, weight="semibold"),
+            font=ctk.CTkFont(family="Inter", size=13, weight="bold"),
             text_color=TEXT_MUTED,
             fg_color="transparent",
+            bg_color=BG_COLOR,
             hover=False,
             anchor="w",
             command=self.toggle_advanced
@@ -196,6 +199,7 @@ class YafwApp(ctk.CTk):
         self.advanced_frame = ctk.CTkFrame(
             self.main_container, 
             fg_color=CARD_BG, 
+            bg_color=BG_COLOR,
             border_color=BORDER_COLOR, 
             border_width=1,
             corner_radius=10
@@ -205,10 +209,10 @@ class YafwApp(ctk.CTk):
         self.advanced_frame.grid_columnconfigure(1, weight=1)
         
         # CRF Slider (H.265 quality)
-        crf_title = ctk.CTkLabel(self.advanced_frame, text="Quality (CRF):", font=ctk.CTkFont(family="Inter", size=12), text_color=TEXT_COLOR)
+        crf_title = ctk.CTkLabel(self.advanced_frame, text="Quality (CRF):", font=ctk.CTkFont(family="Inter", size=12), text_color=TEXT_COLOR, bg_color=CARD_BG)
         crf_title.grid(row=0, column=0, sticky="w", padx=16, pady=(16, 8))
         
-        slider_frame = ctk.CTkFrame(self.advanced_frame, fg_color="transparent")
+        slider_frame = ctk.CTkFrame(self.advanced_frame, fg_color=CARD_BG, bg_color=CARD_BG)
         slider_frame.grid(row=0, column=1, sticky="ew", padx=(0, 16), pady=(16, 8))
         slider_frame.grid_columnconfigure(0, weight=1)
         
@@ -220,6 +224,7 @@ class YafwApp(ctk.CTk):
             button_color=ACCENT_COLOR, 
             button_hover_color=ACCENT_HOVER,
             progress_color=ACCENT_COLOR,
+            bg_color=CARD_BG,
             command=self.update_crf_val
         )
         self.crf_slider.set(26)
@@ -230,17 +235,19 @@ class YafwApp(ctk.CTk):
             text="26 (Highly Compressed)", 
             font=ctk.CTkFont(family="Inter", size=11), 
             text_color=TEXT_MUTED,
+            bg_color=CARD_BG,
             width=140
         )
         self.crf_val_lbl.grid(row=0, column=1, padx=(12, 0))
-
+ 
         # FFmpeg Preset
-        preset_title = ctk.CTkLabel(self.advanced_frame, text="Encoding Preset:", font=ctk.CTkFont(family="Inter", size=12), text_color=TEXT_COLOR)
+        preset_title = ctk.CTkLabel(self.advanced_frame, text="Encoding Preset:", font=ctk.CTkFont(family="Inter", size=12), text_color=TEXT_COLOR, bg_color=CARD_BG)
         preset_title.grid(row=1, column=0, sticky="w", padx=16, pady=8)
         self.adv_preset_menu = ctk.CTkOptionMenu(
             self.advanced_frame,
             values=["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow"],
             fg_color=BG_COLOR,
+            bg_color=CARD_BG,
             button_color=BORDER_COLOR,
             button_hover_color=ACCENT_COLOR,
             dropdown_fg_color=CARD_BG,
@@ -250,12 +257,12 @@ class YafwApp(ctk.CTk):
         )
         self.adv_preset_menu.set("medium")
         self.adv_preset_menu.grid(row=1, column=1, sticky="ew", padx=(0, 16), pady=8)
-
+ 
         # Custom Silence Threshold
-        thresh_title = ctk.CTkLabel(self.advanced_frame, text="Silence Threshold:", font=ctk.CTkFont(family="Inter", size=12), text_color=TEXT_COLOR)
+        thresh_title = ctk.CTkLabel(self.advanced_frame, text="Silence Threshold:", font=ctk.CTkFont(family="Inter", size=12), text_color=TEXT_COLOR, bg_color=CARD_BG)
         thresh_title.grid(row=2, column=0, sticky="w", padx=16, pady=8)
         
-        thresh_frame = ctk.CTkFrame(self.advanced_frame, fg_color="transparent")
+        thresh_frame = ctk.CTkFrame(self.advanced_frame, fg_color=CARD_BG, bg_color=CARD_BG)
         thresh_frame.grid(row=2, column=1, sticky="ew", padx=(0, 16), pady=8)
         thresh_frame.grid_columnconfigure(0, weight=1)
         
@@ -266,19 +273,20 @@ class YafwApp(ctk.CTk):
             border_color=BORDER_COLOR,
             text_color=TEXT_COLOR,
             font=ctk.CTkFont(family="Inter", size=12),
+            bg_color=CARD_BG,
             corner_radius=8
         )
         self.thresh_entry.insert(0, "-30dB")
         self.thresh_entry.grid(row=0, column=0, sticky="ew")
         
-        thresh_hint = ctk.CTkLabel(thresh_frame, text="dB or %", font=ctk.CTkFont(family="Inter", size=11), text_color=TEXT_MUTED)
+        thresh_hint = ctk.CTkLabel(thresh_frame, text="dB or %", font=ctk.CTkFont(family="Inter", size=11), text_color=TEXT_MUTED, bg_color=CARD_BG)
         thresh_hint.grid(row=0, column=1, padx=(12, 0))
-
+ 
         # Margin Size
-        margin_title = ctk.CTkLabel(self.advanced_frame, text="Cut Margin:", font=ctk.CTkFont(family="Inter", size=12), text_color=TEXT_COLOR)
+        margin_title = ctk.CTkLabel(self.advanced_frame, text="Cut Margin:", font=ctk.CTkFont(family="Inter", size=12), text_color=TEXT_COLOR, bg_color=CARD_BG)
         margin_title.grid(row=3, column=0, sticky="w", padx=16, pady=(8, 16))
         
-        margin_frame = ctk.CTkFrame(self.advanced_frame, fg_color="transparent")
+        margin_frame = ctk.CTkFrame(self.advanced_frame, fg_color=CARD_BG, bg_color=CARD_BG)
         margin_frame.grid(row=3, column=1, sticky="ew", padx=(0, 16), pady=(8, 16))
         margin_frame.grid_columnconfigure(0, weight=1)
         
@@ -290,6 +298,7 @@ class YafwApp(ctk.CTk):
             button_color=ACCENT_COLOR, 
             button_hover_color=ACCENT_HOVER,
             progress_color=ACCENT_COLOR,
+            bg_color=CARD_BG,
             command=self.update_margin_val
         )
         self.margin_slider.set(0.2)
@@ -300,6 +309,7 @@ class YafwApp(ctk.CTk):
             text="0.20s", 
             font=ctk.CTkFont(family="Inter", size=11), 
             text_color=TEXT_MUTED,
+            bg_color=CARD_BG,
             width=50
         )
         self.margin_val_lbl.grid(row=0, column=1, padx=(12, 0))
@@ -313,7 +323,7 @@ class YafwApp(ctk.CTk):
         self.status_lbl = ctk.CTkLabel(
             self.progress_frame,
             text="Optimizing and encoding video...",
-            font=ctk.CTkFont(family="Inter", size=13, weight="medium"),
+            font=ctk.CTkFont(family="Inter", size=13, weight="normal"),
             text_color=TEXT_COLOR,
             anchor="w"
         )
@@ -350,7 +360,7 @@ class YafwApp(ctk.CTk):
         self.cancel_btn = ctk.CTkButton(
             self.actions_frame,
             text="Cancel Processing",
-            font=ctk.CTkFont(family="Inter", size=13, weight="semibold"),
+            font=ctk.CTkFont(family="Inter", size=13, weight="bold"),
             text_color=TEXT_COLOR,
             fg_color="#e03131",
             hover_color="#fa5252",
