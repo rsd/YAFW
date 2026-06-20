@@ -1,13 +1,13 @@
 [Setup]
 AppId={{D35F6BC1-8B1E-4F3D-94D5-50DA15F7D242}}
 AppName=YAFW Video Optimizer
-AppVersion=1.1.6
+AppVersion=1.1.7
 AppPublisher=YAFW Team
 DefaultDirName={autopf}\YAFW
 DefaultGroupName=YAFW Video Optimizer
 AllowNoIcons=yes
 OutputDir=dist-installer
-OutputBaseFilename=YAFW_Setup_1.1.6
+OutputBaseFilename=YAFW_Setup_1.1.7
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern

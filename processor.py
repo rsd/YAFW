@@ -1,10 +1,62 @@
 import os
 import sys
 import json
+import logging
 import subprocess
 import threading
 import tempfile
 import shutil
+from logging.handlers import RotatingFileHandler
+
+# ---------------------------------------------------------------------------
+# Logging infrastructure — persistent file log for remote diagnostics
+# ---------------------------------------------------------------------------
+def _get_log_dir():
+    """Returns a writable directory for YAFW logs, platform-aware."""
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+    else:
+        base = os.path.join(os.path.expanduser("~"), ".local", "share")
+    log_dir = os.path.join(base, "YAFW")
+    os.makedirs(log_dir, exist_ok=True)
+    return log_dir
+
+def _setup_logging():
+    """Configure rotating file-based logging for diagnostics."""
+    log_dir = _get_log_dir()
+    log_path = os.path.join(log_dir, "yafw.log")
+
+    handler = RotatingFileHandler(log_path, maxBytes=2 * 1024 * 1024, backupCount=3)
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    ))
+
+    logger = logging.getLogger("yafw")
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
+
+    logger.info("=" * 60)
+    logger.info("YAFW session started")
+    logger.info("Platform: %s | Frozen: %s | Executable: %s",
+                sys.platform, getattr(sys, 'frozen', False), sys.executable)
+    return log_path
+
+LOG_PATH = _setup_logging()
+log = logging.getLogger("yafw")
+
+
+def _subprocess_flags():
+    """
+    Returns platform-specific kwargs to suppress console window blinking on Windows.
+    Without these flags, every subprocess.Popen spawns a visible console window.
+    """
+    if sys.platform == "win32":
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = 0  # SW_HIDE
+        return {"startupinfo": si, "creationflags": subprocess.CREATE_NO_WINDOW}
+    return {}
+
 
 # Detect if running in a PyInstaller bundle and configure PATH to find bundled binaries
 is_frozen = getattr(sys, 'frozen', False)
@@ -18,11 +70,11 @@ if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
     try:
         import static_ffmpeg
         static_ffmpeg.add_paths()
-        print("[YAFW Backend] Loaded static-ffmpeg binaries (system FFmpeg missing).")
+        log.info("Loaded static-ffmpeg binaries (system FFmpeg missing).")
     except ImportError:
-        print("[YAFW Backend] Warning: Neither system FFmpeg nor static-ffmpeg is available.")
+        log.warning("Neither system FFmpeg nor static-ffmpeg is available.")
 else:
-    print("[YAFW Backend] Using native system/bundled FFmpeg/FFprobe.")
+    log.info("Using native system/bundled FFmpeg/FFprobe: %s", shutil.which("ffmpeg"))
 
 def get_video_duration(video_path):
     """
@@ -36,9 +88,10 @@ def get_video_duration(video_path):
         video_path
     ]
     try:
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, **_subprocess_flags())
         return float(res.stdout.strip())
-    except (subprocess.CalledProcessError, ValueError):
+    except (subprocess.CalledProcessError, ValueError) as e:
+        log.warning("ffprobe duration query failed for %s: %s", video_path, e)
         return 0.0
 
 def get_video_dimensions(video_path: str) -> tuple[int, int] | None:
@@ -60,13 +113,13 @@ def get_video_dimensions(video_path: str) -> tuple[int, int] | None:
         video_path
     ]
     try:
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, **_subprocess_flags())
         out = res.stdout.strip()
         if ',' in out:
             w_str, h_str = out.split(',')
             return int(w_str), int(h_str)
-    except (subprocess.CalledProcessError, ValueError):
-        pass
+    except (subprocess.CalledProcessError, ValueError) as e:
+        log.warning("ffprobe dimensions query failed for %s: %s", video_path, e)
     return None
 
 def get_image_scaling_filter(mode: str, w: int, h: int) -> str:
@@ -344,7 +397,7 @@ class VideoProcessorThread(threading.Thread):
                     ae_cmd.extend(["--when-normal", f"speed:{speed_val}"])
 
                 # Run auto-editor and parse in-place progress reports
-                print(f"\n[YAFW Backend] Running silence cut pass via auto-editor:\n{' '.join(ae_cmd)}\n")
+                log.info("Running silence cut pass via auto-editor: %s", ' '.join(ae_cmd))
 
                 # Defensive: prevent xdg-open from launching a media player.
                 # auto-editor v29 binary calls xdg-open on output regardless of --no-open.
@@ -375,12 +428,14 @@ class VideoProcessorThread(threading.Thread):
                     stderr=subprocess.STDOUT,
                     text=True,
                     bufsize=1,
-                    env=headless_env
+                    env=headless_env,
+                    **_subprocess_flags()
                 )
 
                 for line in read_progress_lines(self.process.stdout):
                     if not self.is_running:
                         break
+                    log.debug("[auto-editor] %s", line)
                     
                     if "Analyzing audio" in line:
                         if "%" in line:
@@ -403,8 +458,9 @@ class VideoProcessorThread(threading.Thread):
                 self.process.wait()
 
                 if self.process.returncode != 0:
+                    log.error("auto-editor exited with code %d", self.process.returncode)
                     if self.is_running:
-                        self.progress_callback(0, "Error: Silence cutting pass failed.")
+                        self.progress_callback(0, f"Error: Silence cutting pass failed. See log: {LOG_PATH}")
                     else:
                         self.progress_callback(0, "Process cancelled by user.")
                     return
@@ -474,18 +530,20 @@ class VideoProcessorThread(threading.Thread):
 
                 ffmpeg_cmd.append(self.output_path)
 
-                print(f"\n[YAFW Backend] Running FFmpeg transcoding pass (H.265 + Voice Boost):\n{' '.join(ffmpeg_cmd)}\n")
+                log.info("Running FFmpeg transcoding pass: %s", ' '.join(ffmpeg_cmd))
                 self.process = subprocess.Popen(
                     ffmpeg_cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    bufsize=1
+                    bufsize=1,
+                    **_subprocess_flags()
                 )
 
                 for line in self.process.stdout:
                     if not self.is_running:
                         break
+                    log.debug("[ffmpeg-p2] %s", line.rstrip())
                     
                     if line.startswith("out_time_us="):
                         try:
@@ -500,12 +558,13 @@ class VideoProcessorThread(threading.Thread):
                             pass
 
                 self.process.wait()
+                log.info("FFmpeg pass 2 exited with code %d", self.process.returncode)
 
                 if self.process.returncode == 0:
                     self.progress_callback(100, "Done! Video optimized successfully.")
                 else:
                     if self.is_running:
-                        self.progress_callback(0, f"Processing failed (exit code {self.process.returncode}).")
+                        self.progress_callback(0, f"Processing failed (exit code {self.process.returncode}). See log: {LOG_PATH}")
                     else:
                         self.progress_callback(0, "Process cancelled by user.")
 
@@ -578,18 +637,20 @@ class VideoProcessorThread(threading.Thread):
 
                 ffmpeg_cmd.append(self.output_path)
 
-                print(f"\n[YAFW Backend] Running FFmpeg single-pass optimization command:\n{' '.join(ffmpeg_cmd)}\n")
+                log.info("Running FFmpeg single-pass: %s", ' '.join(ffmpeg_cmd))
                 self.process = subprocess.Popen(
                     ffmpeg_cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    bufsize=1
+                    bufsize=1,
+                    **_subprocess_flags()
                 )
 
                 for line in self.process.stdout:
                     if not self.is_running:
                         break
+                    log.debug("[ffmpeg-sp] %s", line.rstrip())
                     
                     if line.startswith("out_time_us="):
                         try:
@@ -604,17 +665,19 @@ class VideoProcessorThread(threading.Thread):
                             pass
 
                 self.process.wait()
+                log.info("FFmpeg single-pass exited with code %d", self.process.returncode)
 
                 if self.process.returncode == 0:
                     self.progress_callback(100, "Done! Video optimized successfully.")
                 else:
                     if self.is_running:
-                        self.progress_callback(0, f"Processing failed (exit code {self.process.returncode}).")
+                        self.progress_callback(0, f"Processing failed (exit code {self.process.returncode}). See log: {LOG_PATH}")
                     else:
                         self.progress_callback(0, "Process cancelled by user.")
 
         except Exception as e:
-            self.progress_callback(0, f"Exception during run: {str(e)}")
+            log.exception("Unhandled exception in processing thread")
+            self.progress_callback(0, f"Exception: {str(e)}. See log: {LOG_PATH}")
 
         finally:
             # Clean up temp files
