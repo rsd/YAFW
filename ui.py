@@ -125,7 +125,7 @@ class YafwApp(ctk.CTk):
         self.card_cut = ctk.CTkFrame(options_frame, fg_color=CARD_BG, bg_color=BG_COLOR, border_color=BORDER_COLOR, border_width=1, corner_radius=10)
         self.card_cut.grid(row=0, column=0, padx=(0, 8), sticky="nsew")
         self.card_cut.grid_columnconfigure(0, weight=1)
-        self.cut_label = ctk.CTkLabel(self.card_cut, text="Cut Silences", font=ctk.CTkFont(family="Inter", size=13, weight="bold"), text_color=TEXT_COLOR, bg_color=CARD_BG)
+        self.cut_label = tk.Label(self.card_cut, text="Cut Silences", font=("Inter", 13, "bold"), fg=TEXT_COLOR, bg=CARD_BG)
         self.cut_label.grid(row=0, column=0, pady=(12, 4))
         self.cut_switch = ctk.CTkSwitch(self.card_cut, text="", progress_color=ACCENT_COLOR, fg_color="#3a3a44", bg_color=CARD_BG, width=45, command=self.toggle_cut_settings)
         self.cut_switch.select() # Default ON
@@ -135,7 +135,7 @@ class YafwApp(ctk.CTk):
         self.card_speed = ctk.CTkFrame(options_frame, fg_color=CARD_BG, bg_color=BG_COLOR, border_color=BORDER_COLOR, border_width=1, corner_radius=10)
         self.card_speed.grid(row=0, column=1, padx=4, sticky="nsew")
         self.card_speed.grid_columnconfigure(0, weight=1)
-        self.speed_label = ctk.CTkLabel(self.card_speed, text="Speed Up (1.2x)", font=ctk.CTkFont(family="Inter", size=13, weight="bold"), text_color=TEXT_COLOR, bg_color=CARD_BG)
+        self.speed_label = tk.Label(self.card_speed, text="Speed Up (1.2x)", font=("Inter", 13, "bold"), fg=TEXT_COLOR, bg=CARD_BG)
         self.speed_label.grid(row=0, column=0, pady=(12, 4))
         self.speed_switch = ctk.CTkSwitch(self.card_speed, text="", progress_color=ACCENT_COLOR, fg_color="#3a3a44", bg_color=CARD_BG, width=45)
         self.speed_switch.select() # Default ON
@@ -145,7 +145,7 @@ class YafwApp(ctk.CTk):
         self.card_boost = ctk.CTkFrame(options_frame, fg_color=CARD_BG, bg_color=BG_COLOR, border_color=BORDER_COLOR, border_width=1, corner_radius=10)
         self.card_boost.grid(row=0, column=2, padx=(8, 0), sticky="nsew")
         self.card_boost.grid_columnconfigure(0, weight=1)
-        self.boost_label = ctk.CTkLabel(self.card_boost, text="Voice Boost", font=ctk.CTkFont(family="Inter", size=13, weight="bold"), text_color=TEXT_COLOR, bg_color=CARD_BG)
+        self.boost_label = tk.Label(self.card_boost, text="Voice Boost", font=("Inter", 13, "bold"), fg=TEXT_COLOR, bg=CARD_BG)
         self.boost_label.grid(row=0, column=0, pady=(12, 4))
         self.boost_switch = ctk.CTkSwitch(self.card_boost, text="", progress_color=ACCENT_COLOR, fg_color="#3a3a44", bg_color=CARD_BG, width=45)
         self.boost_switch.select() # Default ON
@@ -180,7 +180,9 @@ class YafwApp(ctk.CTk):
             corner_radius=8
         )
         self.preset_menu.set("Normal Room (Medium -30dB)")
-        self.preset_menu.grid(row=0, column=1, sticky="ew")    def create_advanced_settings(self):
+        self.preset_menu.grid(row=0, column=1, sticky="ew")
+
+    def create_advanced_settings(self):
         # Header button to toggle view
         self.advanced_header = ctk.CTkButton(
             self.main_container,
