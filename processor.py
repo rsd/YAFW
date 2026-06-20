@@ -4,10 +4,18 @@ import json
 import subprocess
 import threading
 import tempfile
-import static_ffmpeg
+import shutil
 
-# Initialize static-ffmpeg and add it to the environment PATH
-static_ffmpeg.add_paths()
+# Initialize static-ffmpeg only if system ffmpeg/ffprobe is missing
+if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+    try:
+        import static_ffmpeg
+        static_ffmpeg.add_paths()
+        print("[YAFW Backend] Loaded static-ffmpeg binaries (system FFmpeg missing).")
+    except ImportError:
+        print("[YAFW Backend] Warning: Neither system FFmpeg nor static-ffmpeg is available.")
+else:
+    print("[YAFW Backend] Using native system FFmpeg/FFprobe.")
 
 def get_video_duration(video_path):
     """
@@ -273,12 +281,20 @@ class VideoProcessorThread(threading.Thread):
 
                 # Run auto-editor and parse in-place progress reports
                 print(f"\n[YAFW Backend] Running silence cut pass via auto-editor:\n{' '.join(ae_cmd)}\n")
+
+                # Defensive: strip display vars so xdg-open cannot launch a player
+                # even if auto-editor ignores --no-open on some versions
+                headless_env = os.environ.copy()
+                headless_env.pop("DISPLAY", None)
+                headless_env.pop("WAYLAND_DISPLAY", None)
+
                 self.process = subprocess.Popen(
                     ae_cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    bufsize=1
+                    bufsize=1,
+                    env=headless_env
                 )
 
                 for line in read_progress_lines(self.process.stdout):
@@ -338,11 +354,12 @@ class VideoProcessorThread(threading.Thread):
                 else:
                     ffmpeg_cmd.extend(["-map", "0:v", "-map", "0:a"])
 
-                # Video properties (H.265 optimal compression)
+                # Video properties (H.265 optimal compression with 8-bit YUV compatibility)
                 ffmpeg_cmd.extend([
                     "-c:v", "libx265",
                     "-crf", str(crf),
                     "-preset", preset,
+                    "-pix_fmt", "yuv420p",
                     "-tag:v", "hvc1" # Ensure maximum compatibility with Apple QuickTime/macOS
                 ])
 
@@ -430,6 +447,7 @@ class VideoProcessorThread(threading.Thread):
                     "-c:v", "libx265",
                     "-crf", str(crf),
                     "-preset", preset,
+                    "-pix_fmt", "yuv420p",
                     "-tag:v", "hvc1",
                     "-c:a", "aac",
                     "-b:a", "128k",
