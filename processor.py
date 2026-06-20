@@ -282,11 +282,24 @@ class VideoProcessorThread(threading.Thread):
                 # Run auto-editor and parse in-place progress reports
                 print(f"\n[YAFW Backend] Running silence cut pass via auto-editor:\n{' '.join(ae_cmd)}\n")
 
-                # Defensive: strip display vars so xdg-open cannot launch a player
-                # even if auto-editor ignores --no-open on some versions
+                # Defensive: prevent xdg-open from launching a media player.
+                # auto-editor v29 binary calls xdg-open on output regardless of --no-open.
+                # xdg-open can route through D-Bus portals, so DISPLAY stripping alone
+                # is insufficient. We create a shim directory with xdg-open -> /bin/true
+                # and prepend it to PATH so the binary's exec("xdg-open") resolves to a no-op.
                 headless_env = os.environ.copy()
                 headless_env.pop("DISPLAY", None)
                 headless_env.pop("WAYLAND_DISPLAY", None)
+                headless_env.pop("DBUS_SESSION_BUS_ADDRESS", None)
+                headless_env["BROWSER"] = "/bin/true"
+
+                # Create an ephemeral shim dir where xdg-open is a symlink to /bin/true
+                xdg_shim_dir = os.path.join(tempfile.gettempdir(), "yafw_xdg_shim")
+                os.makedirs(xdg_shim_dir, exist_ok=True)
+                shim_path = os.path.join(xdg_shim_dir, "xdg-open")
+                if not os.path.exists(shim_path):
+                    os.symlink("/bin/true", shim_path)
+                headless_env["PATH"] = xdg_shim_dir + ":" + headless_env.get("PATH", "")
 
                 self.process = subprocess.Popen(
                     ae_cmd,
