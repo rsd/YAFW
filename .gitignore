@@ -31,5 +31,7 @@ output.mp4
 build/
 dist/
 dist-installer/
+bin/
 *.spec
+ffmpeg_temp.zip
 
