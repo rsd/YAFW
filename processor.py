@@ -26,7 +26,7 @@ def get_video_duration(video_path):
     except (subprocess.CalledProcessError, ValueError):
         return 0.0
 
-def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed_val=1.2, voice_boost=False):
+def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed_val=1.2, voice_boost=False, total_duration=0.0):
     """
     Parses the auto-editor .v3 timeline JSON and constructs the ffmpeg filtergraph.
     If cut_silence is False, it will only apply speed and voice boost to the whole file.
@@ -37,11 +37,13 @@ def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed
         video_out = "[0:v]"
         audio_out = "[0:a]"
 
+        expected_output_duration = total_duration
         if speed_up and abs(speed_val - 1.0) > 1e-4:
             filter_parts.append(f"[0:v]setpts=PTS/{speed_val:.4f}[outv_raw]")
             filter_parts.append(f"[0:a]atempo={speed_val:.4f}[outa_raw]")
             video_out = "[outv_raw]"
             audio_out = "[outa_raw]"
+            expected_output_duration = total_duration / speed_val
 
         if voice_boost:
             filter_parts.append(f"{audio_out}dynaudnorm=f=150:g=15[outa]")
@@ -50,7 +52,7 @@ def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed
             filter_parts.append("[outa_raw]anull[outa]")
             audio_out = "[outa]"
 
-        return ";\n".join(filter_parts), video_out, audio_out
+        return ";\n".join(filter_parts), video_out, audio_out, expected_output_duration
 
     # Parse auto-editor timeline
     with open(timeline_json_path, 'r') as f:
@@ -75,11 +77,29 @@ def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed
 
     if not v_clips and not a_clips:
         # Fallback: empty timeline (everything cut)
-        return "", None, None
+        return "", None, None, 0.0
 
     filter_parts = []
     n_v = len(v_clips)
     n_a = len(a_clips)
+
+    # Calculate expected final duration
+    expected_output_duration = 0.0
+    clips_for_duration = v_clips if v_clips else a_clips
+    for clip in clips_for_duration:
+        clip_speed = 1.0
+        effects = clip.get("effects", [])
+        for eff in effects:
+            if eff.startswith("speed:"):
+                try:
+                    clip_speed = float(eff.split(":")[1])
+                except ValueError:
+                    pass
+        if not speed_up:
+            target_speed = 1.0
+        else:
+            target_speed = clip_speed if abs(clip_speed - 1.0) > 1e-4 else speed_val
+        expected_output_duration += (clip["dur"] / target_speed) / fps
 
     # 1. Process Video clips
     for i, clip in enumerate(v_clips):
@@ -171,7 +191,27 @@ def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed
         filter_parts.append("[outa_raw]anull[outa]")
         audio_out = "[outa]"
 
-    return ";\n".join(filter_parts), video_out, audio_out
+    return ";\n".join(filter_parts), video_out, audio_out, expected_output_duration
+
+
+def read_progress_lines(stream):
+    """
+    Generator that yields lines delimited by either \n or \r from a text stream.
+    Useful for reading in-place progress updates from CLI tools.
+    """
+    buffer = []
+    while True:
+        char = stream.read(1)
+        if not char:
+            if buffer:
+                yield "".join(buffer)
+            break
+        if char in ('\r', '\n'):
+            if buffer:
+                yield "".join(buffer)
+                buffer = []
+        else:
+            buffer.append(char)
 
 
 class VideoProcessorThread(threading.Thread):
@@ -183,13 +223,13 @@ class VideoProcessorThread(threading.Thread):
         super().__init__()
         self.input_path = input_path
         self.output_path = output_path
-        self.config = config  # Dict containing: cut_silence, speed_up, voice_boost, noise_threshold, crf, preset
+        self.config = config  # Dict containing: cut_silence, speed_up, voice_boost, noise_threshold, crf, preset, margin
         self.progress_callback = progress_callback
         self.is_running = True
         self.process = None
 
     def run(self):
-        temp_timeline = None
+        temp_edited_path = None
         filter_script = None
         try:
             total_duration = get_video_duration(self.input_path)
@@ -204,154 +244,246 @@ class VideoProcessorThread(threading.Thread):
                 # Fallback to general lookup
                 auto_editor_bin = "auto-editor"
 
-            # Step 1: Silence detection (if cut_silence is enabled)
             if self.config.get("cut_silence", True):
-                self.progress_callback(5, "Analyzing audio for silences...")
+                # =====================================================================
+                # TWO-PASS PIPELINE (To prevent FFmpeg demuxer deadlock on long files)
+                # =====================================================================
+                self.progress_callback(2, "Initializing cut analysis...")
                 
-                # Create a temporary file to store the timeline JSON (must end with .v3)
-                fd, temp_timeline = tempfile.mkstemp(suffix=".v3")
+                # Create a temporary file to store the intermediate edited video
+                fd, temp_edited_path = tempfile.mkstemp(suffix="_edited.mp4")
                 os.close(fd)
 
-                # Formulate auto-editor analysis command
+                # Formulate auto-editor command to execute cuts and speedup
                 threshold = self.config.get("noise_threshold", "-30dB")
+                margin = self.config.get("margin", 0.2)
+                speed_val = 1.2 if self.config.get("speed_up", True) else 1.0
+
                 ae_cmd = [
                     auto_editor_bin,
                     self.input_path,
                     "--edit", f"audio:threshold={threshold}",
-                    "--export", "v3",
-                    "-o", temp_timeline,
-                    "-q"
+                    "--margin", f"{margin}s",
+                    "-o", temp_edited_path
                 ]
+                
+                if self.config.get("speed_up", True):
+                    ae_cmd.extend(["--when-normal", f"speed:{speed_val}"])
 
-                # Run auto-editor
+                # Run auto-editor and parse in-place progress reports
+                print(f"\n[YAFW Backend] Running silence cut pass via auto-editor:\n{' '.join(ae_cmd)}\n")
                 self.process = subprocess.Popen(
                     ae_cmd,
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
                 )
-                _, stderr = self.process.communicate()
+
+                for line in read_progress_lines(self.process.stdout):
+                    if not self.is_running:
+                        break
+                    
+                    if "Analyzing audio" in line:
+                        if "%" in line:
+                            try:
+                                pct_str = line.split("|")[2].split("%")[0].strip()
+                                pct = float(pct_str)
+                                overall_pct = int(pct * 0.05) # Map to 0-5%
+                                self.progress_callback(overall_pct, f"Analyzing audio volume: {pct:.1f}%")
+                            except Exception:
+                                pass
+                    elif "|" in line and "%" in line:
+                        try:
+                            pct_str = line.split("|")[2].split("%")[0].strip()
+                            pct = float(pct_str)
+                            overall_pct = 5 + int(pct * 0.65) # Map rendering cuts to 5-70%
+                            self.progress_callback(overall_pct, f"Cutting silences and speedup: {pct:.1f}%")
+                        except Exception:
+                            pass
+
+                self.process.wait()
 
                 if self.process.returncode != 0:
-                    # Let's inspect the error
-                    if "Timeline is empty" in stderr:
-                        self.progress_callback(0, "Error: Video contains only silence or threshold is too high.")
+                    if self.is_running:
+                        self.progress_callback(0, "Error: Silence cutting pass failed.")
                     else:
-                        self.progress_callback(0, f"Analysis failed: {stderr}")
+                        self.progress_callback(0, "Process cancelled by user.")
                     return
 
-                if not os.path.exists(temp_timeline) or os.path.getsize(temp_timeline) == 0:
-                    self.progress_callback(0, "Error: Failed to generate silence analysis timeline.")
+                if not os.path.exists(temp_edited_path) or os.path.getsize(temp_edited_path) == 0:
+                    self.progress_callback(0, "Error: Failed to generate intermediate edited video.")
                     return
 
-            # Step 2: Build FFmpeg filtergraph
-            self.progress_callback(20, "Building optimization filters...")
-            speed_val = 1.2 if self.config.get("speed_up", True) else 1.0
-            
-            filtergraph, video_out, audio_out = build_filtergraph(
-                timeline_json_path=temp_timeline,
-                cut_silence=self.config.get("cut_silence", True),
-                speed_up=self.config.get("speed_up", True),
-                speed_val=speed_val,
-                voice_boost=self.config.get("voice_boost", False)
-            )
+                # Get duration of intermediate video for exact encoding progress metrics
+                edited_duration = get_video_duration(temp_edited_path)
 
-            if self.config.get("cut_silence", True) and not video_out and not audio_out:
-                self.progress_callback(0, "Error: All content was classified as silent and cut.")
-                return
+                # Pass 2: Run FFmpeg to normalize audio (dynaudnorm) and compress to H.265 (libx265)
+                self.progress_callback(70, "Optimizing and encoding H.265 video...")
+                crf = self.config.get("crf", 26)
+                preset = self.config.get("preset", "medium")
 
-            # Step 3: Run FFmpeg transcoding pass
-            self.progress_callback(25, "Optimizing and encoding H.265 video...")
+                ffmpeg_cmd = [
+                    "ffmpeg",
+                    "-y",
+                    "-progress", "-", # Send progress output to stdout
+                    "-i", temp_edited_path
+                ]
 
-            # Write the filtergraph to a temp file to avoid Windows command line limits
-            fd_f, filter_script = tempfile.mkstemp(suffix=".txt")
-            with open(fd_f, 'w') as f:
-                f.write(filtergraph)
-
-            # Set up the FFmpeg command
-            crf = self.config.get("crf", 26)
-            preset = self.config.get("preset", "medium")
-
-            ffmpeg_cmd = [
-                "ffmpeg",
-                "-y",
-                "-progress", "-", # Send progress to stdout
-                "-i", self.input_path,
-                "-filter_complex_script", filter_script
-            ]
-
-            # Map streams
-            if video_out:
-                ffmpeg_cmd.extend(["-map", video_out])
-            if audio_out:
-                ffmpeg_cmd.extend(["-map", audio_out])
-
-            # Video properties (H.265 optimal compression)
-            ffmpeg_cmd.extend([
-                "-c:v", "libx265",
-                "-crf", str(crf),
-                "-preset", preset,
-                "-tag:v", "hvc1" # Ensure maximum compatibility with Apple QuickTime/macOS
-            ])
-
-            # Audio properties
-            ffmpeg_cmd.extend([
-                "-c:a", "aac",
-                "-b:a", "128k"
-            ])
-
-            ffmpeg_cmd.append(self.output_path)
-
-            # Run FFmpeg process
-            self.process = subprocess.Popen(
-                ffmpeg_cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
-            )
-
-            # Parse stdout/stderr progress updates
-            for line in self.process.stdout:
-                if not self.is_running:
-                    break
-                
-                # Check for progress info
-                if line.startswith("out_time_us="):
-                    try:
-                        time_us = float(line.split("=")[1].strip())
-                        current_sec = time_us / 1000000.0
-                        
-                        # Compensate for speed factor in duration if speed_up is enabled
-                        effective_duration = total_duration
-                        if self.config.get("speed_up", True):
-                            effective_duration /= speed_val
-
-                        # Map the scale from 25% to 98%
-                        percent = 25 + int((current_sec / effective_duration) * 73)
-                        percent = min(98, max(25, percent))
-                        self.progress_callback(percent, f"Processing: {percent}% complete...")
-                    except Exception:
-                        pass
-
-            self.process.wait()
-
-            if self.process.returncode == 0:
-                self.progress_callback(100, "Done! Video optimized successfully.")
-            else:
-                if self.is_running:
-                    self.progress_callback(0, f"Processing failed (exit code {self.process.returncode}).")
+                # Apply Voice Boost (dynaudnorm) if requested
+                if self.config.get("voice_boost", False):
+                    ffmpeg_cmd.extend(["-filter_complex", "[0:a]dynaudnorm=f=150:g=15[outa]"])
+                    ffmpeg_cmd.extend(["-map", "0:v", "-map", "[outa]"])
                 else:
-                    self.progress_callback(0, "Process cancelled by user.")
+                    ffmpeg_cmd.extend(["-map", "0:v", "-map", "0:a"])
+
+                # Video properties (H.265 optimal compression)
+                ffmpeg_cmd.extend([
+                    "-c:v", "libx265",
+                    "-crf", str(crf),
+                    "-preset", preset,
+                    "-tag:v", "hvc1" # Ensure maximum compatibility with Apple QuickTime/macOS
+                ])
+
+                # Audio properties
+                ffmpeg_cmd.extend([
+                    "-c:a", "aac",
+                    "-b:a", "128k"
+                ])
+
+                ffmpeg_cmd.append(self.output_path)
+
+                print(f"\n[YAFW Backend] Running FFmpeg transcoding pass (H.265 + Voice Boost):\n{' '.join(ffmpeg_cmd)}\n")
+                self.process = subprocess.Popen(
+                    ffmpeg_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+
+                for line in self.process.stdout:
+                    if not self.is_running:
+                        break
+                    
+                    if line.startswith("out_time_us="):
+                        try:
+                            time_us = float(line.split("=")[1].strip())
+                            current_sec = time_us / 1000000.0
+                            
+                            sys.stdout.write(line)
+                            sys.stdout.flush()
+
+                            dur_limit = edited_duration if edited_duration > 0.0 else total_duration
+                            pass2_ratio = min(1.0, max(0.0, current_sec / dur_limit))
+                            overall_pct = 70 + int(pass2_ratio * 28) # Map 70% to 98%
+                            self.progress_callback(overall_pct, f"H.265 Encoding: {overall_pct}%")
+                        except Exception:
+                            pass
+
+                self.process.wait()
+
+                if self.process.returncode == 0:
+                    self.progress_callback(100, "Done! Video optimized successfully.")
+                else:
+                    if self.is_running:
+                        self.progress_callback(0, f"Processing failed (exit code {self.process.returncode}).")
+                    else:
+                        self.progress_callback(0, "Process cancelled by user.")
+
+            else:
+                # =====================================================================
+                # SINGLE-PASS PIPELINE (Only speedup and/or audio normalize, no cuts)
+                # =====================================================================
+                self.progress_callback(5, "Building optimization filters...")
+                speed_val = 1.2 if self.config.get("speed_up", True) else 1.0
+                
+                filtergraph, video_out, audio_out, expected_output_duration = build_filtergraph(
+                    timeline_json_path=None,
+                    cut_silence=False,
+                    speed_up=self.config.get("speed_up", True),
+                    speed_val=speed_val,
+                    voice_boost=self.config.get("voice_boost", False),
+                    total_duration=total_duration
+                )
+
+                # Write the filtergraph to a temp file to avoid Windows command line limits
+                fd_f, filter_script = tempfile.mkstemp(suffix=".txt")
+                with open(fd_f, 'w') as f:
+                    f.write(filtergraph)
+
+                crf = self.config.get("crf", 26)
+                preset = self.config.get("preset", "medium")
+
+                ffmpeg_cmd = [
+                    "ffmpeg",
+                    "-y",
+                    "-progress", "-", 
+                    "-i", self.input_path,
+                    "-filter_complex_script", filter_script
+                ]
+
+                if video_out:
+                    ffmpeg_cmd.extend(["-map", video_out])
+                if audio_out:
+                    ffmpeg_cmd.extend(["-map", audio_out])
+
+                ffmpeg_cmd.extend([
+                    "-c:v", "libx265",
+                    "-crf", str(crf),
+                    "-preset", preset,
+                    "-tag:v", "hvc1",
+                    "-c:a", "aac",
+                    "-b:a", "128k",
+                    self.output_path
+                ])
+
+                print(f"\n[YAFW Backend] Running FFmpeg single-pass optimization command:\n{' '.join(ffmpeg_cmd)}\n")
+                self.process = subprocess.Popen(
+                    ffmpeg_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
+                )
+
+                for line in self.process.stdout:
+                    if not self.is_running:
+                        break
+                    
+                    if line.startswith("out_time_us="):
+                        try:
+                            time_us = float(line.split("=")[1].strip())
+                            current_sec = time_us / 1000000.0
+                            
+                            sys.stdout.write(line)
+                            sys.stdout.flush()
+
+                            dur_limit = expected_output_duration if expected_output_duration > 0.0 else total_duration
+                            ratio = min(1.0, max(0.0, current_sec / dur_limit))
+                            overall_pct = 10 + int(ratio * 88) # Map 10% to 98%
+                            self.progress_callback(overall_pct, f"H.265 Encoding: {overall_pct}%")
+                        except Exception:
+                            pass
+
+                self.process.wait()
+
+                if self.process.returncode == 0:
+                    self.progress_callback(100, "Done! Video optimized successfully.")
+                else:
+                    if self.is_running:
+                        self.progress_callback(0, f"Processing failed (exit code {self.process.returncode}).")
+                    else:
+                        self.progress_callback(0, "Process cancelled by user.")
 
         except Exception as e:
             self.progress_callback(0, f"Exception during run: {str(e)}")
 
         finally:
             # Clean up temp files
-            if temp_timeline and os.path.exists(temp_timeline):
+            if temp_edited_path and os.path.exists(temp_edited_path):
                 try:
-                    os.remove(temp_timeline)
+                    os.remove(temp_edited_path)
                 except OSError:
                     pass
             if filter_script and os.path.exists(filter_script):

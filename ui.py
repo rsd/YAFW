@@ -77,7 +77,7 @@ class YafwApp(ctk.CTk):
         
         subtitle_label = ctk.CTkLabel(
             header_frame, 
-            text="Yet Another FFmpeg Wrapper • Lecture & Zoom Optimizer", 
+            text="Yet Another FFmpeg Wrapper v1.1.0 • Lecture & Zoom Optimizer", 
             font=ctk.CTkFont(family="Inter", size=12),
             text_color=TEXT_MUTED
         )
@@ -428,11 +428,12 @@ class YafwApp(ctk.CTk):
         speed_up = bool(self.speed_switch.get())
         voice_boost = bool(self.boost_switch.get())
         
-        # Silence threshold resolution
+        # Silence threshold and margin resolution
         if self.advanced_visible:
             noise_threshold = self.thresh_entry.get().strip()
             crf = int(self.crf_slider.get())
             preset = self.adv_preset_menu.get()
+            margin = float(self.margin_slider.get())
         else:
             # Map presets
             preset_val = self.preset_menu.get()
@@ -445,6 +446,7 @@ class YafwApp(ctk.CTk):
             
             crf = 26  # default optimized for slide presentations
             preset = "medium"
+            margin = 0.2
             
         return {
             "cut_silence": cut_silence,
@@ -452,7 +454,8 @@ class YafwApp(ctk.CTk):
             "voice_boost": voice_boost,
             "noise_threshold": noise_threshold,
             "crf": crf,
-            "preset": preset
+            "preset": preset,
+            "margin": margin
         }
 
     def on_optimize_clicked(self):
