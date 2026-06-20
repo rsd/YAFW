@@ -44,18 +44,29 @@ if __name__ == "__main__":
     if len(sys.argv) > 2 and sys.argv[1] == "-m" and sys.argv[2] == "auto_editor":
         import os
         import shutil
+        import tempfile
 
         # Ensure bundled ffmpeg/ffprobe are on PATH before auto_editor loads
         bundle_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
         if bundle_dir not in os.environ.get("PATH", ""):
             os.environ["PATH"] = bundle_dir + os.pathsep + os.environ.get("PATH", "")
 
+        # Create a writable cache directory for auto_editor.
+        # auto_editor resolves Path(__file__).parent for binary downloads and
+        # temp storage. Inside a frozen bundle (especially under Program Files)
+        # that directory is read-only, causing WinError 5.
+        ae_cache = os.path.join(tempfile.gettempdir(), "yafw_ae_cache")
+        os.makedirs(ae_cache, exist_ok=True)
+
+        import auto_editor
         import auto_editor.__main__ as ae_mod
 
-        # Monkey-patch: auto_editor.download_binary() tries to mkdir inside
-        # its own package directory (e.g. C:\Program Files\...\auto_editor\bin),
-        # which is read-only on Windows. Since we bundle ffmpeg, return
-        # the already-available binary path instead.
+        # Redirect __file__ so Path(__file__).parent resolves to the writable cache
+        auto_editor.__file__ = os.path.join(ae_cache, "__init__.py")
+        ae_mod.__file__ = os.path.join(ae_cache, "__main__.py")
+
+        # Monkey-patch download_binary: return the bundled ffmpeg directory
+        # instead of attempting to download into the (possibly read-only) package dir.
         def _use_bundled_binary():
             ffmpeg_path = shutil.which("ffmpeg")
             if ffmpeg_path:
