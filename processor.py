@@ -6,7 +6,14 @@ import threading
 import tempfile
 import shutil
 
-# Initialize static-ffmpeg only if system ffmpeg/ffprobe is missing
+# Detect if running in a PyInstaller bundle and configure PATH to find bundled binaries
+is_frozen = getattr(sys, 'frozen', False)
+if is_frozen:
+    bundle_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+    if bundle_dir not in os.environ["PATH"]:
+        os.environ["PATH"] = bundle_dir + os.pathsep + os.environ["PATH"]
+
+# Initialize static-ffmpeg only if system/bundled ffmpeg/ffprobe is missing
 if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
     try:
         import static_ffmpeg
@@ -15,7 +22,7 @@ if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
     except ImportError:
         print("[YAFW Backend] Warning: Neither system FFmpeg nor static-ffmpeg is available.")
 else:
-    print("[YAFW Backend] Using native system FFmpeg/FFprobe.")
+    print("[YAFW Backend] Using native system/bundled FFmpeg/FFprobe.")
 
 def get_video_duration(video_path):
     """
@@ -296,12 +303,16 @@ class VideoProcessorThread(threading.Thread):
                 self.progress_callback(0, "Error: Invalid video file or could not read duration.")
                 return
 
-            # Determine virtual environment paths to call binaries
-            python_dir = os.path.dirname(sys.executable)
-            auto_editor_bin = os.path.join(python_dir, "auto-editor")
-            if not os.path.exists(auto_editor_bin):
-                # Fallback to general lookup
-                auto_editor_bin = "auto-editor"
+            # Determine how to call auto-editor (via frozen module or normal binary)
+            is_frozen = getattr(sys, 'frozen', False)
+            if is_frozen:
+                auto_editor_cmd = [sys.executable, "-m", "auto_editor"]
+            else:
+                python_dir = os.path.dirname(sys.executable)
+                auto_editor_bin = os.path.join(python_dir, "auto-editor")
+                if not os.path.exists(auto_editor_bin):
+                    auto_editor_bin = "auto-editor"
+                auto_editor_cmd = [auto_editor_bin]
 
             if self.config.get("cut_silence", True):
                 # =====================================================================
@@ -318,8 +329,7 @@ class VideoProcessorThread(threading.Thread):
                 margin = self.config.get("margin", 0.2)
                 speed_val = 1.2 if self.config.get("speed_up", True) else 1.0
 
-                ae_cmd = [
-                    auto_editor_bin,
+                ae_cmd = list(auto_editor_cmd) + [
                     self.input_path,
                     "--edit", f"audio:threshold={threshold}",
                     "--margin", f"{margin}s",
