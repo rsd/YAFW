@@ -30,4 +30,6 @@ output.mp4
 # PyInstaller distribution files
 build/
 dist/
+dist-installer/
 *.spec
+
