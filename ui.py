@@ -81,7 +81,7 @@ class YafwApp(ctk.CTk):
         
         subtitle_label = ctk.CTkLabel(
             header_frame, 
-            text="Yet Another FFmpeg Wrapper v1.1.4 • Lecture & Zoom Optimizer", 
+            text="Yet Another FFmpeg Wrapper v1.1.5 • Lecture & Zoom Optimizer", 
             font=ctk.CTkFont(family="Inter", size=12),
             text_color=TEXT_MUTED
         )

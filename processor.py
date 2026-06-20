@@ -309,7 +309,10 @@ class VideoProcessorThread(threading.Thread):
                 auto_editor_cmd = [sys.executable, "-m", "auto_editor"]
             else:
                 python_dir = os.path.dirname(sys.executable)
-                auto_editor_bin = os.path.join(python_dir, "auto-editor")
+                if sys.platform == "win32":
+                    auto_editor_bin = os.path.join(python_dir, "auto-editor.exe")
+                else:
+                    auto_editor_bin = os.path.join(python_dir, "auto-editor")
                 if not os.path.exists(auto_editor_bin):
                     auto_editor_bin = "auto-editor"
                 auto_editor_cmd = [auto_editor_bin]
@@ -352,15 +355,19 @@ class VideoProcessorThread(threading.Thread):
                 headless_env.pop("DISPLAY", None)
                 headless_env.pop("WAYLAND_DISPLAY", None)
                 headless_env.pop("DBUS_SESSION_BUS_ADDRESS", None)
-                headless_env["BROWSER"] = "/bin/true"
+                headless_env["BROWSER"] = "/bin/true" if sys.platform != "win32" else ""
 
-                # Create an ephemeral shim dir where xdg-open is a symlink to /bin/true
-                xdg_shim_dir = os.path.join(tempfile.gettempdir(), "yafw_xdg_shim")
-                os.makedirs(xdg_shim_dir, exist_ok=True)
-                shim_path = os.path.join(xdg_shim_dir, "xdg-open")
-                if not os.path.exists(shim_path):
-                    os.symlink("/bin/true", shim_path)
-                headless_env["PATH"] = xdg_shim_dir + ":" + headless_env.get("PATH", "")
+                if sys.platform != "win32":
+                    # Create an ephemeral shim dir where xdg-open is a symlink to /bin/true
+                    xdg_shim_dir = os.path.join(tempfile.gettempdir(), "yafw_xdg_shim")
+                    os.makedirs(xdg_shim_dir, exist_ok=True)
+                    shim_path = os.path.join(xdg_shim_dir, "xdg-open")
+                    if not os.path.exists(shim_path):
+                        try:
+                            os.symlink("/bin/true", shim_path)
+                        except OSError:
+                            pass
+                    headless_env["PATH"] = xdg_shim_dir + os.pathsep + headless_env.get("PATH", "")
 
                 self.process = subprocess.Popen(
                     ae_cmd,

@@ -23,6 +23,23 @@ def generate_ico(png_path, ico_output_path):
         return False
 
 if __name__ == "__main__":
-    src_png = "/home/raul/.gemini/antigravity-ide/brain/3c4a1371-9057-4862-9b1e-82175d6f2350/yafw_icon_1781985723280.png"
-    dest_ico = "assets/icon.ico"
-    generate_ico(src_png, dest_ico)
+    import argparse
+    import sys
+    
+    parser = argparse.ArgumentParser(description="Convert PNG icon to Windows multi-resolution ICO.")
+    parser.add_argument("src_png", nargs="?", default="assets/icon.png", help="Path to source PNG icon")
+    parser.add_argument("dest_ico", nargs="?", default="assets/icon.ico", help="Path to output ICO file")
+    args = parser.parse_args()
+
+    src_png = args.src_png
+    if not os.path.exists(src_png):
+        # Auto-detect any alternative PNG inside assets directory
+        png_files = [f for f in os.listdir("assets") if f.endswith(".png")] if os.path.exists("assets") else []
+        if png_files:
+            src_png = os.path.join("assets", png_files[0])
+            print(f"[YAFW Assets] Default PNG not found, using auto-detected: {src_png}")
+        else:
+            print(f"[YAFW Assets] Error: Source PNG icon not found. Please place a PNG at {src_png}")
+            sys.exit(1)
+
+    generate_ico(src_png, args.dest_ico)

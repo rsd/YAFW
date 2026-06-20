@@ -36,6 +36,13 @@ def on_closing():
     app.destroy()
 
 if __name__ == "__main__":
+    # Handle module execution in frozen PyInstaller bundles
+    if len(sys.argv) > 2 and sys.argv[1] == "-m" and sys.argv[2] == "auto_editor":
+        from auto_editor.__main__ import main as ae_main
+        sys.argv = [sys.argv[0]] + sys.argv[3:]
+        ae_main()
+        sys.exit(0)
+
     app = YafwApp(
         on_start_processing=start_processing,
         on_cancel_processing=cancel_processing

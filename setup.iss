@@ -1,7 +1,7 @@
 [Setup]
 AppId={{D35F6BC1-8B1E-4F3D-94D5-50DA15F7D242}}
 AppName=YAFW Video Optimizer
-AppVersion=1.1.4
+AppVersion=1.1.5
 AppPublisher=YAFW Team
 DefaultDirName={autopf}\YAFW
 DefaultGroupName=YAFW Video Optimizer
