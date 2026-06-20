@@ -99,7 +99,7 @@ class TestYafwAppLogic(unittest.TestCase):
         self.app.advanced_visible = False
         self.app.toggle_advanced()
         self.assertTrue(self.app.advanced_visible)
-        self.app.advanced_frame.grid.assert_called_once_with(row=5, column=0, sticky="ew", pady=(0, 16))
+        self.app.advanced_frame.grid.assert_called_once_with(row=6, column=0, sticky="ew", pady=(0, 16))
         self.app.advanced_header.configure.assert_called_with(text="▲ Advanced Settings")
         
         # Toggle back to hidden

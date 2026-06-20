@@ -24,6 +24,7 @@ class YafwApp(ctk.CTk):
         self.on_cancel_processing = on_cancel_processing
         
         self.selected_file_path = None
+        self.intro_image_path = None
         self.advanced_visible = False
         
         # Configure Main Window
@@ -52,6 +53,9 @@ class YafwApp(ctk.CTk):
         
         # Noise Preset Selection
         self.create_noise_preset_menu()
+        
+        # Intro Image Overlay Section
+        self.create_intro_image_section()
         
         # Collapsible Advanced Settings Panel
         self.create_advanced_settings()
@@ -195,7 +199,7 @@ class YafwApp(ctk.CTk):
             anchor="w",
             command=self.toggle_advanced
         )
-        self.advanced_header.grid(row=4, column=0, sticky="ew", pady=(0, 10))
+        self.advanced_header.grid(row=5, column=0, sticky="ew", pady=(0, 10))
         
         # Advanced Content Card (Hidden by default)
         self.advanced_frame = ctk.CTkFrame(
@@ -343,7 +347,7 @@ class YafwApp(ctk.CTk):
     def create_action_buttons(self):
         # Bottom area buttons
         self.actions_frame = ctk.CTkFrame(self.main_container, fg_color="transparent")
-        self.actions_frame.grid(row=6, column=0, sticky="ew", pady=(20, 0))
+        self.actions_frame.grid(row=7, column=0, sticky="ew", pady=(20, 0))
         self.actions_frame.grid_columnconfigure(0, weight=1)
         
         self.optimize_btn = ctk.CTkButton(
@@ -378,9 +382,88 @@ class YafwApp(ctk.CTk):
             self.advanced_header.configure(text="▼ Advanced Settings")
             self.advanced_visible = False
         else:
-            self.advanced_frame.grid(row=5, column=0, sticky="ew", pady=(0, 16))
+            self.advanced_frame.grid(row=6, column=0, sticky="ew", pady=(0, 16))
             self.advanced_header.configure(text="▲ Advanced Settings")
             self.advanced_visible = True
+
+    def create_intro_image_section(self):
+        # Frame containing intro image settings
+        self.intro_frame = ctk.CTkFrame(
+            self.main_container, 
+            fg_color=CARD_BG, 
+            bg_color=BG_COLOR,
+            border_color=BORDER_COLOR, 
+            border_width=1,
+            corner_radius=12
+        )
+        self.intro_frame.grid(row=4, column=0, sticky="ew", pady=(0, 20))
+        self.intro_frame.grid_columnconfigure(1, weight=1)
+        self.intro_frame.grid_columnconfigure(2, weight=0)
+        
+        # Row 0: Switch
+        self.intro_switch = ctk.CTkSwitch(
+            self.intro_frame,
+            text="Overlay Intro Image (First 1s)",
+            font=ctk.CTkFont(family="Inter", size=13, weight="bold"),
+            progress_color=ACCENT_COLOR,
+            fg_color="#3a3a44",
+            bg_color=CARD_BG,
+            command=self.toggle_intro_image_settings
+        )
+        self.intro_switch.grid(row=0, column=0, columnspan=3, sticky="w", padx=16, pady=(12, 8))
+        
+        # Row 1: File Picker Button
+        self.intro_picker_btn = ctk.CTkButton(
+            self.intro_frame,
+            text="Select Intro Image (PNG/JPG)",
+            font=ctk.CTkFont(family="Inter", size=12),
+            text_color=TEXT_MUTED,
+            fg_color=BG_COLOR,
+            hover_color=BORDER_COLOR,
+            corner_radius=8,
+            command=self.browse_intro_image,
+            state="disabled"
+        )
+        self.intro_picker_btn.grid(row=1, column=0, columnspan=2, sticky="ew", padx=(16, 8), pady=(0, 12))
+        
+        # Row 1 (Col 2): Scale Mode Dropdown
+        self.intro_scale_menu = ctk.CTkOptionMenu(
+            self.intro_frame,
+            values=["Use as is", "Scale to Fit (No Crop)", "Scale to Fill (Crop)"],
+            fg_color=BG_COLOR,
+            bg_color=CARD_BG,
+            button_color=BORDER_COLOR,
+            button_hover_color=ACCENT_COLOR,
+            dropdown_fg_color=CARD_BG,
+            text_color=TEXT_COLOR,
+            font=ctk.CTkFont(family="Inter", size=12),
+            corner_radius=8,
+            state="disabled",
+            width=180
+        )
+        self.intro_scale_menu.set("Scale to Fit (No Crop)")
+        self.intro_scale_menu.grid(row=1, column=2, sticky="e", padx=(8, 16), pady=(0, 12))
+
+    def browse_intro_image(self):
+        file_path = filedialog.askopenfilename(
+            title="Select Intro Image",
+            filetypes=[("Image files", "*.png *.jpg *.jpeg *.webp"), ("All files", "*.*")]
+        )
+        if file_path:
+            self.intro_image_path = file_path
+            filename = os.path.basename(file_path)
+            self.intro_picker_btn.configure(
+                text=f"Image: {filename}",
+                text_color=ACCENT_COLOR
+            )
+
+    def toggle_intro_image_settings(self):
+        if self.intro_switch.get():
+            self.intro_picker_btn.configure(state="normal")
+            self.intro_scale_menu.configure(state="normal")
+        else:
+            self.intro_picker_btn.configure(state="disabled")
+            self.intro_scale_menu.configure(state="disabled")
 
     def toggle_cut_settings(self):
         # Disable/enable noise preset menu if Cutting silences is toggled
@@ -448,6 +531,15 @@ class YafwApp(ctk.CTk):
             preset = "medium"
             margin = 0.2
             
+        intro_image_enabled = bool(self.intro_switch.get())
+        intro_mode_val = self.intro_scale_menu.get()
+        if "Fit" in intro_mode_val:
+            intro_mode = "fit"
+        elif "Fill" in intro_mode_val:
+            intro_mode = "fill"
+        else:
+            intro_mode = "as_is"
+
         return {
             "cut_silence": cut_silence,
             "speed_up": speed_up,
@@ -455,12 +547,19 @@ class YafwApp(ctk.CTk):
             "noise_threshold": noise_threshold,
             "crf": crf,
             "preset": preset,
-            "margin": margin
+            "margin": margin,
+            "intro_image_enabled": intro_image_enabled,
+            "intro_image_path": self.intro_image_path,
+            "intro_image_scale_mode": intro_mode
         }
 
     def on_optimize_clicked(self):
         if not self.selected_file_path:
             tk.messagebox.showwarning("No File Selected", "Please select a video file to optimize.")
+            return
+            
+        if self.intro_switch.get() and not self.intro_image_path:
+            tk.messagebox.showwarning("No Image Selected", "Please select an intro image or disable the intro image overlay.")
             return
             
         # Select output destination
@@ -491,6 +590,7 @@ class YafwApp(ctk.CTk):
             self.picker_frame.grid_forget()
             self.card_cut.master.grid_forget()
             self.preset_frame.grid_forget()
+            self.intro_frame.grid_forget()
             self.advanced_header.grid_forget()
             if self.advanced_visible:
                 self.advanced_frame.grid_forget()
@@ -511,9 +611,10 @@ class YafwApp(ctk.CTk):
             self.picker_frame.grid(row=1, column=0, sticky="ew", pady=(0, 20))
             self.card_cut.master.grid(row=2, column=0, sticky="ew", pady=(0, 16))
             self.preset_frame.grid(row=3, column=0, sticky="ew", pady=(0, 20))
-            self.advanced_header.grid(row=4, column=0, sticky="ew", pady=(0, 10))
+            self.intro_frame.grid(row=4, column=0, sticky="ew", pady=(0, 20))
+            self.advanced_header.grid(row=5, column=0, sticky="ew", pady=(0, 10))
             if self.advanced_visible:
-                self.advanced_frame.grid(row=5, column=0, sticky="ew", pady=(0, 16))
+                self.advanced_frame.grid(row=6, column=0, sticky="ew", pady=(0, 16))
                 
             # Update action buttons
             self.cancel_btn.grid_forget()

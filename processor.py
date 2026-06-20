@@ -34,6 +34,57 @@ def get_video_duration(video_path):
     except (subprocess.CalledProcessError, ValueError):
         return 0.0
 
+def get_video_dimensions(video_path: str) -> tuple[int, int] | None:
+    """
+    Retrieves the width and height of the video using ffprobe.
+
+    Args:
+        video_path: The file path to the source video.
+
+    Returns:
+        A tuple of (width, height) if successful, or None if querying fails.
+    """
+    cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=width,height",
+        "-of", "csv=p=0",
+        video_path
+    ]
+    try:
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+        out = res.stdout.strip()
+        if ',' in out:
+            w_str, h_str = out.split(',')
+            return int(w_str), int(h_str)
+    except (subprocess.CalledProcessError, ValueError):
+        pass
+    return None
+
+def get_image_scaling_filter(mode: str, w: int, h: int) -> str:
+    """
+    Generates the FFmpeg filter chain to scale the image input [1:v] to match w x h.
+
+    Args:
+        mode: The scaling mode ("as_is", "fit", "fill").
+        w: Target canvas width.
+        h: Target canvas height.
+
+    Returns:
+        The FFmpeg filtergraph snippet.
+    """
+    # Intent: Construct dynamic scale expressions leveraging dynamic input dimensions (iw, ih)
+    if mode == "fit":
+        # Scale to Fit: Preserve aspect ratio, pad borders with black
+        return f"[1:v]scale=w='min({w}, iw*{h}/ih)':h='min({h}, ih*{w}/iw)',pad=w={w}:h={h}:x=(ow-iw)/2:y=(oh-ih)/2:color=black[img_prepped]"
+    elif mode == "fill":
+        # Scale to Fill: Scale to cover target canvas, crop exceeding edges
+        return f"[1:v]scale=w='max({w}, iw*{h}/ih)':h='max({h}, ih*{w}/iw)',crop=w={w}:h={h}[img_prepped]"
+    else:
+        # Use as is: Centered, padding unmatched margins or clipping overflow
+        return f"[1:v]pad=w={w}:h={h}:x=(ow-iw)/2:y=(oh-ih)/2:color=black[img_prepped]"
+
 def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed_val=1.2, voice_boost=False, total_duration=0.0):
     """
     Parses the auto-editor .v3 timeline JSON and constructs the ffmpeg filtergraph.
@@ -353,6 +404,10 @@ class VideoProcessorThread(threading.Thread):
                 crf = self.config.get("crf", 26)
                 preset = self.config.get("preset", "medium")
 
+                intro_enabled = self.config.get("intro_image_enabled", False)
+                intro_path = self.config.get("intro_image_path")
+                intro_mode = self.config.get("intro_image_scale_mode", "as_is")
+
                 ffmpeg_cmd = [
                     "ffmpeg",
                     "-y",
@@ -360,12 +415,27 @@ class VideoProcessorThread(threading.Thread):
                     "-i", temp_edited_path
                 ]
 
-                # Apply Voice Boost (dynaudnorm) if requested
-                if self.config.get("voice_boost", False):
-                    ffmpeg_cmd.extend(["-filter_complex", "[0:a]dynaudnorm=f=150:g=15[outa]"])
-                    ffmpeg_cmd.extend(["-map", "0:v", "-map", "[outa]"])
+                if intro_enabled and intro_path:
+                    ffmpeg_cmd.extend(["-loop", "1", "-i", intro_path])
+                    dims = get_video_dimensions(temp_edited_path) or (1920, 1080)
+                    width, height = dims
+                    scale_filter = get_image_scaling_filter(intro_mode, width, height)
+                    
+                    if self.config.get("voice_boost", False):
+                        filtergraph = f"{scale_filter};[0:v][img_prepped]overlay=enable='lte(t,1)'[outv];[0:a]dynaudnorm=f=150:g=15[outa]"
+                        ffmpeg_cmd.extend(["-filter_complex", filtergraph])
+                        ffmpeg_cmd.extend(["-map", "[outv]", "-map", "[outa]"])
+                    else:
+                        filtergraph = f"{scale_filter};[0:v][img_prepped]overlay=enable='lte(t,1)'[outv]"
+                        ffmpeg_cmd.extend(["-filter_complex", filtergraph])
+                        ffmpeg_cmd.extend(["-map", "[outv]", "-map", "0:a"])
                 else:
-                    ffmpeg_cmd.extend(["-map", "0:v", "-map", "0:a"])
+                    # Apply Voice Boost (dynaudnorm) if requested
+                    if self.config.get("voice_boost", False):
+                        ffmpeg_cmd.extend(["-filter_complex", "[0:a]dynaudnorm=f=150:g=15[outa]"])
+                        ffmpeg_cmd.extend(["-map", "0:v", "-map", "[outa]"])
+                    else:
+                        ffmpeg_cmd.extend(["-map", "0:v", "-map", "0:a"])
 
                 # Video properties (H.265 optimal compression with 8-bit YUV compatibility)
                 ffmpeg_cmd.extend([
@@ -381,6 +451,9 @@ class VideoProcessorThread(threading.Thread):
                     "-c:a", "aac",
                     "-b:a", "128k"
                 ])
+
+                if intro_enabled and intro_path:
+                    ffmpeg_cmd.append("-shortest")
 
                 ffmpeg_cmd.append(self.output_path)
 
@@ -435,6 +508,19 @@ class VideoProcessorThread(threading.Thread):
                     total_duration=total_duration
                 )
 
+                intro_enabled = self.config.get("intro_image_enabled", False)
+                intro_path = self.config.get("intro_image_path")
+                intro_mode = self.config.get("intro_image_scale_mode", "as_is")
+
+                if intro_enabled and intro_path:
+                    dims = get_video_dimensions(self.input_path) or (1920, 1080)
+                    width, height = dims
+                    scale_filter = get_image_scaling_filter(intro_mode, width, height)
+                    if filtergraph:
+                        filtergraph += ";\n"
+                    filtergraph += f"{scale_filter};\n{video_out}[img_prepped]overlay=enable='lte(t,1)'[outv_final]"
+                    video_out = "[outv_final]"
+
                 # Write the filtergraph to a temp file to avoid Windows command line limits
                 fd_f, filter_script = tempfile.mkstemp(suffix=".txt")
                 with open(fd_f, 'w') as f:
@@ -447,9 +533,13 @@ class VideoProcessorThread(threading.Thread):
                     "ffmpeg",
                     "-y",
                     "-progress", "-", 
-                    "-i", self.input_path,
-                    "-filter_complex_script", filter_script
+                    "-i", self.input_path
                 ]
+
+                if intro_enabled and intro_path:
+                    ffmpeg_cmd.extend(["-loop", "1", "-i", intro_path])
+
+                ffmpeg_cmd.extend(["-filter_complex_script", filter_script])
 
                 if video_out:
                     ffmpeg_cmd.extend(["-map", video_out])
@@ -463,9 +553,13 @@ class VideoProcessorThread(threading.Thread):
                     "-pix_fmt", "yuv420p",
                     "-tag:v", "hvc1",
                     "-c:a", "aac",
-                    "-b:a", "128k",
-                    self.output_path
+                    "-b:a", "128k"
                 ])
+
+                if intro_enabled and intro_path:
+                    ffmpeg_cmd.append("-shortest")
+
+                ffmpeg_cmd.append(self.output_path)
 
                 print(f"\n[YAFW Backend] Running FFmpeg single-pass optimization command:\n{' '.join(ffmpeg_cmd)}\n")
                 self.process = subprocess.Popen(

@@ -133,10 +133,11 @@ class TestVideoProcessorThread(unittest.TestCase):
     @patch("processor.get_video_duration")
     @patch("shutil.which")
     @patch("os.path.exists")
+    @patch("os.path.getsize")
     @patch("subprocess.Popen")
     @patch("os.remove")
     @patch("os.close", side_effect=safe_os_close)
-    def test_run_success_two_pass(self, mock_close, mock_remove, mock_popen, mock_exists, mock_which, mock_duration):
+    def test_run_success_two_pass(self, mock_close, mock_remove, mock_popen, mock_getsize, mock_exists, mock_which, mock_duration):
         mock_duration.side_effect = [100.0, 50.0] # 100s source, 50s edited
         mock_which.return_value = "/usr/bin/ffmpeg"
         mock_exists.return_value = True # auto-editor exists
@@ -188,7 +189,6 @@ class TestVideoProcessorThread(unittest.TestCase):
             thread.run()
             
         # Check some progress callback levels
-        print("\nDEBUG PROGRESS CALLS:", progress_calls)
         self.assertTrue(len(progress_calls) > 0)
         # Should terminate with 100% success msg
         self.assertEqual(progress_calls[-1][0], 100)
