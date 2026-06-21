@@ -6,6 +6,7 @@ import subprocess
 import threading
 import tempfile
 import shutil
+import time
 from logging.handlers import RotatingFileHandler
 
 # ---------------------------------------------------------------------------
@@ -25,6 +26,17 @@ def _setup_logging():
     """Configure rotating file-based logging for diagnostics."""
     log_dir = _get_log_dir()
     log_path = os.path.join(log_dir, "yafw.log")
+
+    # Clear log file on startup to prevent excessive growth
+    if os.path.exists(log_path):
+        try:
+            os.remove(log_path)
+        except OSError:
+            try:
+                with open(log_path, "w", encoding="utf-8") as f:
+                    f.truncate(0)
+            except OSError:
+                pass
 
     handler = RotatingFileHandler(log_path, maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8")
     handler.setFormatter(logging.Formatter(
@@ -350,6 +362,21 @@ class VideoProcessorThread(threading.Thread):
     def run(self):
         temp_edited_path = None
         filter_script = None
+
+        last_progress_pct = -1
+        last_progress_msg = ""
+        last_progress_time = 0.0
+
+        def safe_update_progress(pct, msg):
+            nonlocal last_progress_pct, last_progress_msg, last_progress_time
+            current_time = time.time()
+            # Throttling callback to max once per 0.25 seconds or on important state transitions (0, 5, 70, 100)
+            if (pct != last_progress_pct or msg != last_progress_msg) and (current_time - last_progress_time >= 0.25 or pct == 100 or pct <= 0 or pct == 70 or pct == 5):
+                last_progress_pct = pct
+                last_progress_msg = msg
+                last_progress_time = current_time
+                self.progress_callback(pct, msg)
+
         try:
             total_duration = get_video_duration(self.input_path)
             if total_duration <= 0.0:
@@ -455,7 +482,7 @@ class VideoProcessorThread(threading.Thread):
                                 pct_str = line.split("|")[2].split("%")[0].strip()
                                 pct = float(pct_str)
                                 overall_pct = int(pct * 0.05) # Map to 0-5%
-                                self.progress_callback(overall_pct, f"Analyzing audio volume: {pct:.1f}%")
+                                safe_update_progress(overall_pct, f"Analyzing audio volume: {pct:.1f}%")
                             except Exception:
                                 pass
                     elif "|" in line and "%" in line:
@@ -463,7 +490,7 @@ class VideoProcessorThread(threading.Thread):
                             pct_str = line.split("|")[2].split("%")[0].strip()
                             pct = float(pct_str)
                             overall_pct = 5 + int(pct * 0.65) # Map rendering cuts to 5-70%
-                            self.progress_callback(overall_pct, f"Cutting silences and speedup: {pct:.1f}%")
+                            safe_update_progress(overall_pct, f"Cutting silences and speedup: {pct:.1f}%")
                         except Exception:
                             pass
 
@@ -567,7 +594,7 @@ class VideoProcessorThread(threading.Thread):
                             dur_limit = edited_duration if edited_duration > 0.0 else total_duration
                             pass2_ratio = min(1.0, max(0.0, current_sec / dur_limit))
                             overall_pct = 70 + int(pass2_ratio * 28) # Map 70% to 98%
-                            self.progress_callback(overall_pct, f"H.265 Encoding: {overall_pct}%")
+                            safe_update_progress(overall_pct, f"H.265 Encoding: {overall_pct}%")
                         except Exception:
                             pass
 
@@ -676,7 +703,7 @@ class VideoProcessorThread(threading.Thread):
                             dur_limit = expected_output_duration if expected_output_duration > 0.0 else total_duration
                             ratio = min(1.0, max(0.0, current_sec / dur_limit))
                             overall_pct = 10 + int(ratio * 88) # Map 10% to 98%
-                            self.progress_callback(overall_pct, f"H.265 Encoding: {overall_pct}%")
+                            safe_update_progress(overall_pct, f"H.265 Encoding: {overall_pct}%")
                         except Exception:
                             pass
 
