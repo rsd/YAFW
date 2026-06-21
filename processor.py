@@ -359,7 +359,17 @@ class VideoProcessorThread(threading.Thread):
             # Determine how to call auto-editor (via frozen module or normal binary)
             is_frozen = getattr(sys, 'frozen', False)
             if is_frozen:
-                auto_editor_cmd = [sys.executable, "-m", "auto_editor"]
+                bundle_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+                # Prioritize directly bundled standalone binary to bypass module re-entry
+                if sys.platform == "win32":
+                    bundled_ae = os.path.join(bundle_dir, "auto-editor.exe")
+                else:
+                    bundled_ae = os.path.join(bundle_dir, "auto-editor")
+                
+                if os.path.exists(bundled_ae):
+                    auto_editor_cmd = [bundled_ae]
+                else:
+                    auto_editor_cmd = [sys.executable, "-m", "auto_editor"]
             else:
                 python_dir = os.path.dirname(sys.executable)
                 if sys.platform == "win32":

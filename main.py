@@ -65,13 +65,33 @@ if __name__ == "__main__":
         auto_editor.__file__ = os.path.join(ae_cache, "__init__.py")
         ae_mod.__file__ = os.path.join(ae_cache, "__main__.py")
 
-        # Monkey-patch download_binary: return the bundled ffmpeg directory
-        # instead of attempting to download into the (possibly read-only) package dir.
+        # Locate the bundled auto-editor binary
+        ae_name = "auto-editor.exe" if sys.platform == "win32" else "auto-editor"
+        bundled_bin = os.path.join(bundle_dir, ae_name)
+        target_bin = os.path.join(ae_cache, "bin", ae_name)
+
+        # Pre-populate the cache if possible to skip download checks
+        if os.path.exists(bundled_bin):
+            os.makedirs(os.path.dirname(target_bin), exist_ok=True)
+            try:
+                if not os.path.exists(target_bin) or os.path.getsize(target_bin) != os.path.getsize(bundled_bin):
+                    shutil.copy2(bundled_bin, target_bin)
+                    if sys.platform != "win32":
+                        os.chmod(target_bin, 0o755)
+            except Exception:
+                pass
+
+        # Monkey-patch download_binary to copy and return the writable executable Path
         def _use_bundled_binary():
-            ffmpeg_path = shutil.which("ffmpeg")
-            if ffmpeg_path:
-                return os.path.dirname(os.path.abspath(ffmpeg_path))
-            raise FileNotFoundError("Bundled ffmpeg not found on PATH")
+            if os.path.exists(bundled_bin):
+                os.makedirs(os.path.dirname(target_bin), exist_ok=True)
+                if not os.path.exists(target_bin) or os.path.getsize(target_bin) != os.path.getsize(bundled_bin):
+                    shutil.copy2(bundled_bin, target_bin)
+                    if sys.platform != "win32":
+                        os.chmod(target_bin, 0o755)
+                from pathlib import Path
+                return Path(target_bin)
+            raise FileNotFoundError("Bundled auto-editor binary not found")
 
         ae_mod.download_binary = _use_bundled_binary
 

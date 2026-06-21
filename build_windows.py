@@ -100,6 +100,37 @@ def download_ffmpeg_binaries():
             os.remove(zip_path)
         return False
 
+def download_auto_editor_binary():
+    """
+    Downloads static Windows auto-editor binary from GitHub Releases and writes to bin/.
+    """
+    bin_dir = "bin"
+    target_path = os.path.join(bin_dir, "auto-editor.exe")
+    
+    if os.path.exists(target_path):
+        print("[YAFW Build] Windows auto-editor binary already present in bin/ folder.")
+        return True
+
+    os.makedirs(bin_dir, exist_ok=True)
+    
+    try:
+        import auto_editor
+        ae_version = auto_editor.__version__
+    except ImportError:
+        ae_version = "29.3.1"
+        
+    url = f"https://github.com/WyattBlue/auto-editor/releases/download/{ae_version}/auto-editor-windows-amd64.exe"
+    print(f"[YAFW Build] Downloading Windows auto-editor from {url}...")
+    try:
+        urllib.request.urlretrieve(url, target_path)
+        print(f"[YAFW Build] Downloaded auto-editor binary to {target_path}")
+        return True
+    except Exception as e:
+        print(f"[YAFW Build] Error obtaining auto-editor binary: {e}")
+        if os.path.exists(target_path):
+            os.remove(target_path)
+        return False
+
 def run_docker_builds():
     """
     Runs PyInstaller and Inno Setup compilation commands using Docker.
@@ -148,6 +179,9 @@ if __name__ == "__main__":
     print(f"[YAFW Build] Building YAFW v{new_version}")
 
     if not download_ffmpeg_binaries():
+        sys.exit(1)
+
+    if not download_auto_editor_binary():
         sys.exit(1)
         
     if not run_docker_builds():
