@@ -360,6 +360,7 @@ class VideoProcessorThread(threading.Thread):
         self.process = None
 
     def run(self):
+        temp_remux_path = None
         temp_edited_path = None
         filter_script = None
 
@@ -411,6 +412,32 @@ class VideoProcessorThread(threading.Thread):
                 # =====================================================================
                 # TWO-PASS PIPELINE (To prevent FFmpeg demuxer deadlock on long files)
                 # =====================================================================
+                self.progress_callback(1, "Pre-processing input container...")
+                
+                # Pre-mux the input to a clean container to fix VFR and timestamp anomalies for auto-editor
+                fd_remux, temp_remux_path = tempfile.mkstemp(suffix="_remuxed.mp4")
+                os.close(fd_remux)
+
+                remux_cmd = [
+                    "ffmpeg", "-y",
+                    "-i", self.input_path,
+                    "-c", "copy",
+                    temp_remux_path
+                ]
+                log.info("Pre-muxing input to clean container: %s", ' '.join(remux_cmd))
+                try:
+                    subprocess.run(remux_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, **_subprocess_flags())
+                    ae_input_path = temp_remux_path
+                except Exception as e:
+                    log.warning("Pre-muxing step failed, falling back to original file: %s", e)
+                    ae_input_path = self.input_path
+                    if os.path.exists(temp_remux_path):
+                        try:
+                            os.remove(temp_remux_path)
+                        except OSError:
+                            pass
+                        temp_remux_path = None
+
                 self.progress_callback(2, "Initializing cut analysis...")
                 
                 # Create a temporary file to store the intermediate edited video
@@ -423,9 +450,10 @@ class VideoProcessorThread(threading.Thread):
                 speed_val = 1.2 if self.config.get("speed_up", True) else 1.0
 
                 ae_cmd = list(auto_editor_cmd) + [
-                    self.input_path,
+                    ae_input_path,
                     "--edit", f"audio:threshold={threshold}",
                     "--margin", f"{margin}s",
+                    "--no-seek",
                     "--no-open",
                     "-o", temp_edited_path
                 ]
@@ -722,6 +750,11 @@ class VideoProcessorThread(threading.Thread):
 
         finally:
             # Clean up temp files
+            if temp_remux_path and os.path.exists(temp_remux_path):
+                try:
+                    os.remove(temp_remux_path)
+                except OSError:
+                    pass
             if temp_edited_path and os.path.exists(temp_edited_path):
                 try:
                     os.remove(temp_edited_path)
