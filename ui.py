@@ -653,8 +653,8 @@ class YafwApp(ctk.CTk):
         self.status_lbl.configure(text=status_text)
         
         # When complete or error, reset the UI
-        if percent == 100 or percent <= 0:
-            if "Error" in status_text or "failed" in status_text or "cancelled" in status_text:
+        if percent == 100 or (percent <= 0 and ("Error" in status_text or "failed" in status_text or "cancelled" in status_text or "Exception" in status_text)):
+            if "Error" in status_text or "failed" in status_text or "cancelled" in status_text or "Exception" in status_text:
                 tk.messagebox.showerror("Processing Failed", status_text)
             elif percent == 100:
                 tk.messagebox.showinfo("Optimization Complete", "Your optimized video has been exported successfully!")

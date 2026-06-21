@@ -134,6 +134,13 @@ If the application runs into issues during video optimization, look at the log f
 
 The log file is automatically truncated (cleared) on each new session start to prevent it from growing indefinitely.
 
+### Blank Video / Audio-Only Output on Long Videos
+Long screen recordings (like Zoom, Teams, or OBS files) frequently contain Variable Frame Rate (VFR) tracks and non-aligned presentation timestamps (PTS). During timeline cutting, these anomalies can trigger seeking desyncs and cause the video decoder to output blank/black streams.
+
+To solve this, YAFW automatically:
+1. Pre-muxes the video to a clean container format using an instantaneous stream copy (`ffmpeg -c copy`) before passing the file to `auto-editor`.
+2. Appends the `--no-seek` flag to disable frame seeking, forcing sequential frame-by-frame decoding.
+
 ---
 
 ## Code Architecture
