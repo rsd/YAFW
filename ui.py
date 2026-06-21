@@ -34,6 +34,26 @@ class YafwApp(ctk.CTk):
         self.minsize(580, 620)
         self.configure(fg_color=BG_COLOR)
         
+        # Set Window Icon (topbar and taskbar on Windows)
+        try:
+            import sys
+            import ctypes
+            # Force Windows to associate the taskbar shortcut with this window explicitly
+            if sys.platform == "win32":
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("yafw.videooptimizer.1.1")
+            
+            is_frozen = getattr(sys, 'frozen', False)
+            if is_frozen:
+                bundle_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+                icon_path = os.path.join(bundle_dir, "assets", "icon.ico")
+            else:
+                icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "icon.ico")
+                
+            if os.path.exists(icon_path):
+                self.iconbitmap(icon_path)
+        except Exception:
+            pass
+        
         # Grid Configuration
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
