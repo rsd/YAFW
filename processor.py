@@ -528,17 +528,17 @@ class VideoProcessorThread(threading.Thread):
                 ]
 
                 if intro_enabled and intro_path:
-                    ffmpeg_cmd.extend(["-loop", "1", "-i", intro_path])
+                    ffmpeg_cmd.extend(["-i", intro_path])
                     dims = get_video_dimensions(temp_edited_path) or (1920, 1080)
                     width, height = dims
                     scale_filter = get_image_scaling_filter(intro_mode, width, height)
                     
                     if self.config.get("voice_boost", False):
-                        filtergraph = f"{scale_filter};[0:v][img_prepped]overlay=enable='lte(t,1)'[outv];[0:a]dynaudnorm=f=150:g=15[outa]"
+                        filtergraph = f"{scale_filter};[0:v][img_prepped]overlay=enable='lte(t,1)':eof_action=repeat[outv];[0:a]dynaudnorm=f=150:g=15[outa]"
                         ffmpeg_cmd.extend(["-filter_complex", filtergraph])
                         ffmpeg_cmd.extend(["-map", "[outv]", "-map", "[outa]"])
                     else:
-                        filtergraph = f"{scale_filter};[0:v][img_prepped]overlay=enable='lte(t,1)'[outv]"
+                        filtergraph = f"{scale_filter};[0:v][img_prepped]overlay=enable='lte(t,1)':eof_action=repeat[outv]"
                         ffmpeg_cmd.extend(["-filter_complex", filtergraph])
                         ffmpeg_cmd.extend(["-map", "[outv]", "-map", "0:a"])
                 else:
@@ -564,8 +564,7 @@ class VideoProcessorThread(threading.Thread):
                     "-b:a", "128k"
                 ])
 
-                if intro_enabled and intro_path:
-                    ffmpeg_cmd.append("-shortest")
+                # Omit -shortest since intro image is finite stream (no loop)
 
                 ffmpeg_cmd.append(self.output_path)
 
@@ -635,7 +634,7 @@ class VideoProcessorThread(threading.Thread):
                     scale_filter = get_image_scaling_filter(intro_mode, width, height)
                     if filtergraph:
                         filtergraph += ";\n"
-                    filtergraph += f"{scale_filter};\n{video_out}[img_prepped]overlay=enable='lte(t,1)'[outv_final]"
+                    filtergraph += f"{scale_filter};\n{video_out}[img_prepped]overlay=enable='lte(t,1)':eof_action=repeat[outv_final]"
                     video_out = "[outv_final]"
 
                 # Write the filtergraph to a temp file to avoid Windows command line limits
@@ -654,7 +653,7 @@ class VideoProcessorThread(threading.Thread):
                 ]
 
                 if intro_enabled and intro_path:
-                    ffmpeg_cmd.extend(["-loop", "1", "-i", intro_path])
+                    ffmpeg_cmd.extend(["-i", intro_path])
 
                 ffmpeg_cmd.extend(["-filter_complex_script", filter_script])
 
@@ -673,8 +672,7 @@ class VideoProcessorThread(threading.Thread):
                     "-b:a", "128k"
                 ])
 
-                if intro_enabled and intro_path:
-                    ffmpeg_cmd.append("-shortest")
+                # Omit -shortest since intro image is finite stream (no loop)
 
                 ffmpeg_cmd.append(self.output_path)
 
