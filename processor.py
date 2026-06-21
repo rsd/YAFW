@@ -26,7 +26,7 @@ def _setup_logging():
     log_dir = _get_log_dir()
     log_path = os.path.join(log_dir, "yafw.log")
 
-    handler = RotatingFileHandler(log_path, maxBytes=2 * 1024 * 1024, backupCount=3)
+    handler = RotatingFileHandler(log_path, maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8")
     handler.setFormatter(logging.Formatter(
         "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     ))
@@ -88,7 +88,7 @@ def get_video_duration(video_path):
         video_path
     ]
     try:
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, **_subprocess_flags())
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", check=True, **_subprocess_flags())
         return float(res.stdout.strip())
     except (subprocess.CalledProcessError, ValueError) as e:
         log.warning("ffprobe duration query failed for %s: %s", video_path, e)
@@ -113,7 +113,7 @@ def get_video_dimensions(video_path: str) -> tuple[int, int] | None:
         video_path
     ]
     try:
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, **_subprocess_flags())
+        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", check=True, **_subprocess_flags())
         out = res.stdout.strip()
         if ',' in out:
             w_str, h_str = out.split(',')
@@ -174,7 +174,7 @@ def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed
         return ";\n".join(filter_parts), video_out, audio_out, expected_output_duration
 
     # Parse auto-editor timeline
-    with open(timeline_json_path, 'r') as f:
+    with open(timeline_json_path, 'r', encoding="utf-8") as f:
         data = json.load(f)
 
     # Detect frame rate (timebase)
@@ -437,6 +437,8 @@ class VideoProcessorThread(threading.Thread):
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     bufsize=1,
                     env=headless_env,
                     **_subprocess_flags()
@@ -546,6 +548,8 @@ class VideoProcessorThread(threading.Thread):
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     bufsize=1,
                     **_subprocess_flags()
                 )
@@ -609,7 +613,7 @@ class VideoProcessorThread(threading.Thread):
 
                 # Write the filtergraph to a temp file to avoid Windows command line limits
                 fd_f, filter_script = tempfile.mkstemp(suffix=".txt")
-                with open(fd_f, 'w') as f:
+                with open(fd_f, 'w', encoding="utf-8") as f:
                     f.write(filtergraph)
 
                 crf = self.config.get("crf", 26)
@@ -653,6 +657,8 @@ class VideoProcessorThread(threading.Thread):
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     bufsize=1,
                     **_subprocess_flags()
                 )
