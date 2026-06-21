@@ -126,6 +126,16 @@ Clicking **Advanced Settings** in the GUI expands details for custom parameter t
 
 ---
 
+## Troubleshooting & Diagnostics
+
+If the application runs into issues during video optimization, look at the log file for detailed tracebacks and process messages:
+- **Windows**: The log is saved to `%LOCALAPPDATA%\YAFW\yafw.log`. You can easily open this directory by typing `explorer %LOCALAPPDATA%\YAFW` or pasting the file path directly into File Explorer.
+- **Linux**: The log is saved to `~/.local/share/YAFW/yafw.log`.
+
+The log file is automatically truncated (cleared) on each new session start to prevent it from growing indefinitely.
+
+---
+
 ## Code Architecture
 
 - **[main.py](file:///home/raul/Devel/Utilities/YAFW/main.py)**: Application entry. Orchestrates safe event mapping and handles main window closing protocols.
