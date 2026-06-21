@@ -131,44 +131,91 @@ def download_auto_editor_binary():
             os.remove(target_path)
         return False
 
-def run_docker_builds():
+def run_builds():
     """
-    Runs PyInstaller and Inno Setup compilation commands using Docker.
+    Runs PyInstaller and Inno Setup compilation commands.
+    Falls back to native build if Docker is not available.
     """
+    import shutil
     current_dir = os.getcwd()
+    has_docker = shutil.which("docker") is not None
     
-    # 1. Compile Windows Executable via batonogov/pyinstaller-windows:latest
-    print("[YAFW Build] Step 1: Compiling Windows executable using batonogov/pyinstaller-windows Docker image...")
-    pyinstaller_cmd = [
-        "docker", "run", "--rm",
-        "-v", f"{current_dir}:/src",
-        "batonogov/pyinstaller-windows:latest",
-        "pyinstaller --noconfirm YAFW.spec"
-    ]
-    
-    try:
-        subprocess.run(pyinstaller_cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"[YAFW Build] PyInstaller compilation failed: {e}")
-        return False
+    if has_docker:
+        print("[YAFW Build] Docker detected. Running builds via Docker...")
+        # 1. Compile Windows Executable via batonogov/pyinstaller-windows:latest
+        print("[YAFW Build] Step 1: Compiling Windows executable using batonogov/pyinstaller-windows Docker image...")
+        pyinstaller_cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{current_dir}:/src",
+            "batonogov/pyinstaller-windows:latest",
+            "pyinstaller --noconfirm YAFW.spec"
+        ]
+        try:
+            subprocess.run(pyinstaller_cmd, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"[YAFW Build] PyInstaller compilation failed: {e}")
+            return False
 
-    # 2. Compile Windows Installer via amake/innosetup
-    print("[YAFW Build] Step 2: Compiling Windows Installer using amake/innosetup Docker image...")
-    innosetup_cmd = [
-        "docker", "run", "--rm",
-        "-v", f"{current_dir}:/work",
-        "amake/innosetup",
-        "setup.iss"
-    ]
+        # 2. Compile Windows Installer via amake/innosetup
+        print("[YAFW Build] Step 2: Compiling Windows Installer using amake/innosetup Docker image...")
+        innosetup_cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{current_dir}:/work",
+            "amake/innosetup",
+            "setup.iss"
+        ]
+        try:
+            subprocess.run(innosetup_cmd, check=True)
+            new_version = read_version()
+            print(f"[YAFW Build] Build succeeded! Installer: dist-installer/YAFW_Setup_{new_version}.exe")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"[YAFW Build] Inno Setup compilation failed: {e}")
+            return False
+    else:
+        print("[YAFW Build] Docker not detected. Attempting native build on Windows...")
+        # 1. Compile Windows Executable natively
+        pyinstaller_bin = os.path.join(current_dir, ".venv", "Scripts", "pyinstaller.exe")
+        if not os.path.exists(pyinstaller_bin):
+            pyinstaller_bin = shutil.which("pyinstaller")
+            if not pyinstaller_bin:
+                print("[YAFW Build] Error: PyInstaller not found. Please install it or activate virtual environment.")
+                return False
+        
+        print(f"[YAFW Build] Step 1: Compiling Windows executable using native PyInstaller: {pyinstaller_bin}")
+        pyinstaller_cmd = [pyinstaller_bin, "--noconfirm", "YAFW.spec"]
+        try:
+            subprocess.run(pyinstaller_cmd, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"[YAFW Build] PyInstaller compilation failed: {e}")
+            return False
 
-    try:
-        subprocess.run(innosetup_cmd, check=True)
-        new_version = read_version()
-        print(f"[YAFW Build] Build succeeded! Installer: dist-installer/YAFW_Setup_{new_version}.exe")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"[YAFW Build] Inno Setup compilation failed: {e}")
-        return False
+        # 2. Compile Windows Installer natively
+        iscc_paths = [
+            r"C:\Users\raul\AppData\Local\Programs\Antigravity IDE\resources\app\node_modules\innosetup\bin\ISCC.exe",
+            r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+            shutil.which("ISCC")
+        ]
+        iscc_bin = None
+        for path in iscc_paths:
+            if path and os.path.exists(path):
+                iscc_bin = path
+                break
+                
+        if not iscc_bin:
+            print("[YAFW Build] Error: Inno Setup compiler (ISCC.exe) not found.")
+            return False
+
+        print(f"[YAFW Build] Step 2: Compiling Windows Installer using native ISCC: {iscc_bin}")
+        innosetup_cmd = [iscc_bin, "setup.iss"]
+        try:
+            subprocess.run(innosetup_cmd, check=True)
+            new_version = read_version()
+            print(f"[YAFW Build] Build succeeded! Installer: dist-installer/YAFW_Setup_{new_version}.exe")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"[YAFW Build] Inno Setup compilation failed: {e}")
+            return False
 
 if __name__ == "__main__":
     # Step 0: Auto-increment patch version
@@ -184,5 +231,5 @@ if __name__ == "__main__":
     if not download_auto_editor_binary():
         sys.exit(1)
         
-    if not run_docker_builds():
+    if not run_builds():
         sys.exit(1)

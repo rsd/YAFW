@@ -584,14 +584,22 @@ class YafwApp(ctk.CTk):
             
         # Select output destination
         default_name = "optimized_" + os.path.basename(self.selected_file_path)
+        if not default_name.lower().endswith(".mp4"):
+            default_name += ".mp4"
+            
         output_path = filedialog.asksaveasfilename(
             title="Save Optimized Video As",
             initialfile=default_name,
+            defaultextension=".mp4",
             filetypes=[("MP4 Video", "*.mp4"), ("All files", "*.*")]
         )
         
         if not output_path:
             return
+            
+        # Ensure it has a valid extension (fallback to .mp4 if missing)
+        if not os.path.splitext(output_path)[1]:
+            output_path += ".mp4"
             
         # Configure GUI for Processing state
         self.set_processing_ui(True)
