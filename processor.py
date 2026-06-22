@@ -10,6 +10,20 @@ import time
 from logging.handlers import RotatingFileHandler
 
 # ---------------------------------------------------------------------------
+# Encoding defaults and shared filter constants
+# Centralized so the same values aren't duplicated across the pipeline branches.
+# ---------------------------------------------------------------------------
+DEFAULT_SPEED = 1.2          # Playback speedup applied to "normal" (non-silent) sections
+DEFAULT_CRF = 35             # H.265 constant rate factor (higher = smaller/lower quality)
+DEFAULT_PRESET = "slow"      # libx265 preset (compression/time tradeoff)
+DEFAULT_MARGIN = 0.2         # Seconds of padding kept around loud sections
+DEFAULT_THRESHOLD = "-30dB"  # auto-editor audio silence threshold
+AUDIO_BITRATE = "128k"       # AAC output bitrate
+INTRO_OVERLAY_SECONDS = 1    # Duration the intro image is overlaid at the start
+# Dynamic audio normalization ("Voice Boost") filter, reused in every path.
+DYNAUDNORM_FILTER = "dynaudnorm=f=150:g=15"
+
+# ---------------------------------------------------------------------------
 # Logging infrastructure — persistent file log for remote diagnostics
 # ---------------------------------------------------------------------------
 def _get_log_dir():
@@ -157,7 +171,52 @@ def get_image_scaling_filter(mode: str, w: int, h: int) -> str:
         # Use as is: Centered, padding unmatched margins or clipping overflow
         return f"[1:v]pad=w={w}:h={h}:x=(ow-iw)/2:y=(oh-ih)/2:color=black[img_prepped]"
 
-def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed_val=1.2, voice_boost=False, total_duration=0.0):
+def _append_encode_args(cmd, crf, preset):
+    """
+    Appends the shared H.265 video + AAC audio encoding arguments used by both
+    pipeline passes (two-pass and single-pass). Mutates `cmd` in place.
+    """
+    cmd.extend([
+        # Video: H.265 with 8-bit YUV; hvc1 tag for Apple QuickTime/macOS compatibility
+        "-c:v", "libx265",
+        "-crf", str(crf),
+        "-preset", preset,
+        "-pix_fmt", "yuv420p",
+        "-tag:v", "hvc1",
+        # Audio
+        "-c:a", "aac",
+        "-b:a", AUDIO_BITRATE,
+    ])
+
+
+def _clip_speed(clip):
+    """
+    Returns the explicit speed multiplier encoded in a timeline clip's effects
+    (e.g. "speed:2.0"), or 1.0 if the clip has no speed effect.
+    """
+    for eff in clip.get("effects", []):
+        if eff.startswith("speed:"):
+            try:
+                return float(eff.split(":")[1])
+            except (ValueError, IndexError):
+                pass
+    return 1.0
+
+
+def _target_speed(clip_speed, speed_up, speed_val):
+    """
+    Resolves the playback speed to apply to a clip.
+
+    - If speedup is disabled, clips play at 1.0x.
+    - A clip that already carries an explicit speed keeps it.
+    - Otherwise the global speedup value is applied.
+    """
+    if not speed_up:
+        return 1.0
+    return clip_speed if abs(clip_speed - 1.0) > 1e-4 else speed_val
+
+
+def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed_val=DEFAULT_SPEED, voice_boost=False, total_duration=0.0):
     """
     Parses the auto-editor .v3 timeline JSON and constructs the ffmpeg filtergraph.
     If cut_silence is False, it will only apply speed and voice boost to the whole file.
@@ -177,7 +236,7 @@ def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed
             expected_output_duration = total_duration / speed_val
 
         if voice_boost:
-            filter_parts.append(f"{audio_out}dynaudnorm=f=150:g=15[outa]")
+            filter_parts.append(f"{audio_out}{DYNAUDNORM_FILTER}[outa]")
             audio_out = "[outa]"
         elif audio_out == "[outa_raw]":
             filter_parts.append("[outa_raw]anull[outa]")
@@ -218,41 +277,16 @@ def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed
     expected_output_duration = 0.0
     clips_for_duration = v_clips if v_clips else a_clips
     for clip in clips_for_duration:
-        clip_speed = 1.0
-        effects = clip.get("effects", [])
-        for eff in effects:
-            if eff.startswith("speed:"):
-                try:
-                    clip_speed = float(eff.split(":")[1])
-                except ValueError:
-                    pass
-        if not speed_up:
-            target_speed = 1.0
-        else:
-            target_speed = clip_speed if abs(clip_speed - 1.0) > 1e-4 else speed_val
+        target_speed = _target_speed(_clip_speed(clip), speed_up, speed_val)
         expected_output_duration += (clip["dur"] / target_speed) / fps
 
     # 1. Process Video clips
     for i, clip in enumerate(v_clips):
         offset = clip["offset"]
         dur = clip["dur"]
-        
-        # Determine speed multiplier in the clip
-        clip_speed = 1.0
-        effects = clip.get("effects", [])
-        for eff in effects:
-            if eff.startswith("speed:"):
-                try:
-                    clip_speed = float(eff.split(":")[1])
-                except ValueError:
-                    pass
-        
-        # Determine target speed for this segment
-        if not speed_up:
-            target_speed = 1.0
-        else:
-            # If the clip already has a speed, keep it, otherwise use speed_val
-            target_speed = clip_speed if abs(clip_speed - 1.0) > 1e-4 else speed_val
+
+        clip_speed = _clip_speed(clip)
+        target_speed = _target_speed(clip_speed, speed_up, speed_val)
 
         # Source duration is based on the original clip speed
         src_dur = dur * clip_speed
@@ -268,20 +302,9 @@ def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed
     for i, clip in enumerate(a_clips):
         offset = clip["offset"]
         dur = clip["dur"]
-        
-        clip_speed = 1.0
-        effects = clip.get("effects", [])
-        for eff in effects:
-            if eff.startswith("speed:"):
-                try:
-                    clip_speed = float(eff.split(":")[1])
-                except ValueError:
-                    pass
 
-        if not speed_up:
-            target_speed = 1.0
-        else:
-            target_speed = clip_speed if abs(clip_speed - 1.0) > 1e-4 else speed_val
+        clip_speed = _clip_speed(clip)
+        target_speed = _target_speed(clip_speed, speed_up, speed_val)
 
         src_dur = dur * clip_speed
         start_sec = offset / fps
@@ -316,7 +339,7 @@ def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed
 
     # 5. Apply voice boost / audio normalization if requested
     if audio_out and voice_boost:
-        filter_parts.append(f"{audio_out}dynaudnorm=f=150:g=15[outa]")
+        filter_parts.append(f"{audio_out}{DYNAUDNORM_FILTER}[outa]")
         audio_out = "[outa]"
     elif audio_out == "[outa_raw]":
         filter_parts.append("[outa_raw]anull[outa]")
@@ -445,9 +468,9 @@ class VideoProcessorThread(threading.Thread):
                 os.close(fd)
 
                 # Formulate auto-editor command to execute cuts and speedup
-                threshold = self.config.get("noise_threshold", "-30dB")
-                margin = self.config.get("margin", 0.2)
-                speed_val = 1.2 if self.config.get("speed_up", True) else 1.0
+                threshold = self.config.get("noise_threshold", DEFAULT_THRESHOLD)
+                margin = self.config.get("margin", DEFAULT_MARGIN)
+                speed_val = self.config.get("speed_val", DEFAULT_SPEED) if self.config.get("speed_up", True) else 1.0
 
                 ae_cmd = list(auto_editor_cmd) + [
                     ae_input_path,
@@ -540,8 +563,9 @@ class VideoProcessorThread(threading.Thread):
 
                 # Pass 2: Run FFmpeg to normalize audio (dynaudnorm) and compress to H.265 (libx265)
                 self.progress_callback(30, "Optimizing and encoding H.265 video...")
-                crf = self.config.get("crf", 35)
-                preset = self.config.get("preset", "slow")
+                crf = self.config.get("crf", DEFAULT_CRF)
+                preset = self.config.get("preset", DEFAULT_PRESET)
+                voice_boost = self.config.get("voice_boost", False)
 
                 intro_enabled = self.config.get("intro_image_enabled", False)
                 intro_path = self.config.get("intro_image_path")
@@ -559,37 +583,26 @@ class VideoProcessorThread(threading.Thread):
                     dims = get_video_dimensions(temp_edited_path) or (1920, 1080)
                     width, height = dims
                     scale_filter = get_image_scaling_filter(intro_mode, width, height)
-                    
-                    if self.config.get("voice_boost", False):
-                        filtergraph = f"{scale_filter};[0:v][img_prepped]overlay=enable='lte(t,1)':eof_action=repeat[outv];[0:a]dynaudnorm=f=150:g=15[outa]"
-                        ffmpeg_cmd.extend(["-filter_complex", filtergraph])
+                    overlay = (
+                        f"{scale_filter};[0:v][img_prepped]"
+                        f"overlay=enable='lte(t,{INTRO_OVERLAY_SECONDS})':eof_action=repeat[outv]"
+                    )
+
+                    if voice_boost:
+                        ffmpeg_cmd.extend(["-filter_complex", f"{overlay};[0:a]{DYNAUDNORM_FILTER}[outa]"])
                         ffmpeg_cmd.extend(["-map", "[outv]", "-map", "[outa]"])
                     else:
-                        filtergraph = f"{scale_filter};[0:v][img_prepped]overlay=enable='lte(t,1)':eof_action=repeat[outv]"
-                        ffmpeg_cmd.extend(["-filter_complex", filtergraph])
+                        ffmpeg_cmd.extend(["-filter_complex", overlay])
                         ffmpeg_cmd.extend(["-map", "[outv]", "-map", "0:a"])
                 else:
                     # Apply Voice Boost (dynaudnorm) if requested
-                    if self.config.get("voice_boost", False):
-                        ffmpeg_cmd.extend(["-filter_complex", "[0:a]dynaudnorm=f=150:g=15[outa]"])
+                    if voice_boost:
+                        ffmpeg_cmd.extend(["-filter_complex", f"[0:a]{DYNAUDNORM_FILTER}[outa]"])
                         ffmpeg_cmd.extend(["-map", "0:v", "-map", "[outa]"])
                     else:
                         ffmpeg_cmd.extend(["-map", "0:v", "-map", "0:a"])
 
-                # Video properties (H.265 optimal compression with 8-bit YUV compatibility)
-                ffmpeg_cmd.extend([
-                    "-c:v", "libx265",
-                    "-crf", str(crf),
-                    "-preset", preset,
-                    "-pix_fmt", "yuv420p",
-                    "-tag:v", "hvc1" # Ensure maximum compatibility with Apple QuickTime/macOS
-                ])
-
-                # Audio properties
-                ffmpeg_cmd.extend([
-                    "-c:a", "aac",
-                    "-b:a", "128k"
-                ])
+                _append_encode_args(ffmpeg_cmd, crf, preset)
 
                 # Omit -shortest since intro image is finite stream (no loop)
 
@@ -640,8 +653,8 @@ class VideoProcessorThread(threading.Thread):
                 # SINGLE-PASS PIPELINE (Only speedup and/or audio normalize, no cuts)
                 # =====================================================================
                 self.progress_callback(5, "Building optimization filters...")
-                speed_val = 1.2 if self.config.get("speed_up", True) else 1.0
-                
+                speed_val = self.config.get("speed_val", DEFAULT_SPEED) if self.config.get("speed_up", True) else 1.0
+
                 filtergraph, video_out, audio_out, expected_output_duration = build_filtergraph(
                     timeline_json_path=None,
                     cut_silence=False,
@@ -661,7 +674,7 @@ class VideoProcessorThread(threading.Thread):
                     scale_filter = get_image_scaling_filter(intro_mode, width, height)
                     if filtergraph:
                         filtergraph += ";\n"
-                    filtergraph += f"{scale_filter};\n{video_out}[img_prepped]overlay=enable='lte(t,1)':eof_action=repeat[outv_final]"
+                    filtergraph += f"{scale_filter};\n{video_out}[img_prepped]overlay=enable='lte(t,{INTRO_OVERLAY_SECONDS})':eof_action=repeat[outv_final]"
                     video_out = "[outv_final]"
 
                 # Write the filtergraph to a temp file to avoid Windows command line limits
@@ -669,8 +682,8 @@ class VideoProcessorThread(threading.Thread):
                 with open(fd_f, 'w', encoding="utf-8") as f:
                     f.write(filtergraph)
 
-                crf = self.config.get("crf", 35)
-                preset = self.config.get("preset", "slow")
+                crf = self.config.get("crf", DEFAULT_CRF)
+                preset = self.config.get("preset", DEFAULT_PRESET)
 
                 ffmpeg_cmd = [
                     "ffmpeg",
@@ -689,15 +702,7 @@ class VideoProcessorThread(threading.Thread):
                 if audio_out:
                     ffmpeg_cmd.extend(["-map", audio_out])
 
-                ffmpeg_cmd.extend([
-                    "-c:v", "libx265",
-                    "-crf", str(crf),
-                    "-preset", preset,
-                    "-pix_fmt", "yuv420p",
-                    "-tag:v", "hvc1",
-                    "-c:a", "aac",
-                    "-b:a", "128k"
-                ])
+                _append_encode_args(ffmpeg_cmd, crf, preset)
 
                 # Omit -shortest since intro image is finite stream (no loop)
 
