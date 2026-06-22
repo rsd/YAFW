@@ -134,10 +134,11 @@ class TestVideoProcessorThread(unittest.TestCase):
     @patch("shutil.which")
     @patch("os.path.exists")
     @patch("os.path.getsize")
+    @patch("subprocess.run")
     @patch("subprocess.Popen")
     @patch("os.remove")
     @patch("os.close", side_effect=safe_os_close)
-    def test_run_success_two_pass(self, mock_close, mock_remove, mock_popen, mock_getsize, mock_exists, mock_which, mock_duration):
+    def test_run_success_two_pass(self, mock_close, mock_remove, mock_popen, mock_run, mock_getsize, mock_exists, mock_which, mock_duration):
         mock_duration.side_effect = [100.0, 50.0] # 100s source, 50s edited
         mock_which.return_value = "/usr/bin/ffmpeg"
         mock_exists.return_value = True # auto-editor exists
@@ -199,10 +200,11 @@ class TestVideoProcessorThread(unittest.TestCase):
         mock_close.assert_any_call(99)
 
     @patch("processor.get_video_duration")
+    @patch("subprocess.run")
     @patch("subprocess.Popen")
     @patch("os.remove")
     @patch("os.close", side_effect=safe_os_close)
-    def test_run_cancellation(self, mock_close, mock_remove, mock_popen, mock_duration):
+    def test_run_cancellation(self, mock_close, mock_remove, mock_popen, mock_run, mock_duration):
         mock_duration.return_value = 100.0
         
         # Setup run loop to terminate upon is_running flag
