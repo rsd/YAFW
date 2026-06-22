@@ -79,9 +79,10 @@ class TestYafwAppLogic(unittest.TestCase):
         
         self.app.margin_slider = MagicMock()
         self.app.margin_slider.get.return_value = 0.4
-        
+
         self.app.advanced_visible = True
-        
+        self.app.advanced_used = True
+
         config = self.app.get_config()
         self.assertFalse(config["cut_silence"])
         self.assertTrue(config["speed_up"])
@@ -90,6 +91,40 @@ class TestYafwAppLogic(unittest.TestCase):
         self.assertEqual(config["crf"], 22)
         self.assertEqual(config["preset"], "fast")
         self.assertEqual(config["margin"], 0.4)
+
+    def test_get_config_advanced_collapsed_keeps_values(self):
+        # Regression: opening advanced, customizing, then collapsing the panel
+        # must still honor the advanced widgets (advanced_used stays True).
+        self.app.cut_switch = MagicMock()
+        self.app.cut_switch.get.return_value = 1
+
+        self.app.speed_switch = MagicMock()
+        self.app.speed_switch.get.return_value = 1
+
+        self.app.boost_switch = MagicMock()
+        self.app.boost_switch.get.return_value = 0
+
+        self.app.thresh_entry = MagicMock()
+        self.app.thresh_entry.get.return_value = "-22dB"
+
+        self.app.crf_slider = MagicMock()
+        self.app.crf_slider.get.return_value = 24.0
+
+        self.app.adv_preset_menu = MagicMock()
+        self.app.adv_preset_menu.get.return_value = "medium"
+
+        self.app.margin_slider = MagicMock()
+        self.app.margin_slider.get.return_value = 0.3
+
+        # Panel is collapsed, but the user engaged it earlier.
+        self.app.advanced_visible = False
+        self.app.advanced_used = True
+
+        config = self.app.get_config()
+        self.assertEqual(config["noise_threshold"], "-22dB")
+        self.assertEqual(config["crf"], 24)
+        self.assertEqual(config["preset"], "medium")
+        self.assertEqual(config["margin"], 0.3)
 
     def test_toggle_advanced(self):
         self.app.advanced_frame = MagicMock()
