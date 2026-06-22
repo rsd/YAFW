@@ -5,7 +5,7 @@ import json
 import os
 import io
 
-from processor import get_video_duration, build_filtergraph, VideoProcessorThread
+from processor import get_video_duration, build_filtergraph, VideoProcessorThread, _atempo_chain
 
 # Safe side-effect wrapper for os.close to ignore mocked file descriptor 99
 # while keeping original closing functionality for other descriptors
@@ -52,6 +52,25 @@ class TestGetVideoDuration(unittest.TestCase):
         
         duration = get_video_duration("dummy_path.mp4")
         self.assertEqual(duration, 0.0)
+
+
+class TestAtempoChain(unittest.TestCase):
+    def test_in_range_single_filter(self):
+        self.assertEqual(_atempo_chain(1.2), "atempo=1.2000")
+        self.assertEqual(_atempo_chain(2.0), "atempo=2.0000")
+        self.assertEqual(_atempo_chain(0.5), "atempo=0.5000")
+
+    def test_above_two_is_chained(self):
+        # 2.5 = 2.0 * 1.25, both within ffmpeg's per-filter [0.5, 2.0] range
+        self.assertEqual(_atempo_chain(2.5), "atempo=2.0000,atempo=1.2500")
+
+    def test_far_above_two_is_chained(self):
+        # 5.0 = 2.0 * 2.0 * 1.25
+        self.assertEqual(_atempo_chain(5.0), "atempo=2.0000,atempo=2.0000,atempo=1.2500")
+
+    def test_below_half_is_chained(self):
+        # 0.25 = 0.5 * 0.5
+        self.assertEqual(_atempo_chain(0.25), "atempo=0.5000,atempo=0.5000")
 
 
 class TestBuildFiltergraph(unittest.TestCase):
@@ -156,7 +175,7 @@ class TestVideoProcessorThread(unittest.TestCase):
         mock_process_ffmpeg.stdout = io.StringIO(
             "frame=100\n"
             "fps=30.0\n"
-            "out_time_us=25000000\n" # 25s done -> 50% of Pass 2 -> 70 + 0.5 * 28 = 84%
+            "out_time_us=25000000\n" # 25s of 50s edited -> 50% of Pass 2 -> 30 + 0.5 * 68 = 64%
             "speed=2.0x\n"
         )
         mock_process_ffmpeg.returncode = 0

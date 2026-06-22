@@ -1,4 +1,6 @@
-customtkinter>=5.2.0
-pillow>=10.0.0
-auto-editor>=23.0.0
-static-ffmpeg>=2.5.0
+customtkinter>=5.2.0,<6.0.0
+pillow>=10.0.0,<12.0.0
+# Pinned below 30: the frozen-bundle integration relies on auto-editor v29
+# internals (the .v3 timeline format, --no-seek, and the download_binary hook).
+auto-editor>=23.0.0,<30.0.0
+static-ffmpeg>=2.5.0,<3.0.0
