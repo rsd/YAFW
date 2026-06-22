@@ -171,8 +171,8 @@ class TestVideoProcessorThread(unittest.TestCase):
             "speed_up": True,
             "voice_boost": True,
             "noise_threshold": "-30dB",
-            "crf": 26,
-            "preset": "medium",
+            "crf": 35,
+            "preset": "slow",
             "margin": 0.2
         }
         

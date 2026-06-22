@@ -254,12 +254,12 @@ class YafwApp(ctk.CTk):
             bg_color=CARD_BG,
             command=self.update_crf_val
         )
-        self.crf_slider.set(26)
+        self.crf_slider.set(35)
         self.crf_slider.grid(row=0, column=0, sticky="ew")
         
         self.crf_val_lbl = ctk.CTkLabel(
             slider_frame, 
-            text="26 (Highly Compressed)", 
+            text="35 (Extreme Compression)", 
             font=ctk.CTkFont(family="Inter", size=11), 
             text_color=TEXT_MUTED,
             bg_color=CARD_BG,
@@ -282,7 +282,7 @@ class YafwApp(ctk.CTk):
             font=ctk.CTkFont(family="Inter", size=12),
             corner_radius=8
         )
-        self.adv_preset_menu.set("medium")
+        self.adv_preset_menu.set("slow")
         self.adv_preset_menu.grid(row=1, column=1, sticky="ew", padx=(0, 16), pady=8)
  
         # Custom Silence Threshold
@@ -547,8 +547,8 @@ class YafwApp(ctk.CTk):
             else:
                 noise_threshold = "-30dB"
             
-            crf = 26  # default optimized for slide presentations
-            preset = "medium"
+            crf = 35  # default optimized for slide presentations
+            preset = "slow"
             margin = 0.2
             
         intro_image_enabled = bool(self.intro_switch.get())

@@ -54,8 +54,8 @@ class TestYafwAppLogic(unittest.TestCase):
         self.assertTrue(config["speed_up"])
         self.assertFalse(config["voice_boost"])
         self.assertEqual(config["noise_threshold"], "-35dB")
-        self.assertEqual(config["crf"], 26)
-        self.assertEqual(config["preset"], "medium")
+        self.assertEqual(config["crf"], 35)
+        self.assertEqual(config["preset"], "slow")
         self.assertEqual(config["margin"], 0.2)
 
     def test_get_config_advanced_view(self):
