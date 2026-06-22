@@ -1,8 +1,13 @@
 import os
+import logging
 import tkinter as tk
 from tkinter import filedialog
 import customtkinter as ctk
 from version import __version__
+
+# Shares the "yafw" logger configured in processor.py so UI diagnostics land in
+# the same log file. Falls back to a no-op handler if used standalone.
+log = logging.getLogger("yafw")
 
 # Configure global CustomTkinter settings
 ctk.set_appearance_mode("Dark")
@@ -52,7 +57,8 @@ class YafwApp(ctk.CTk):
             if os.path.exists(icon_path):
                 self.iconbitmap(icon_path)
         except Exception:
-            pass
+            # Non-fatal: the window simply uses the default icon. Log for diagnostics.
+            log.debug("Could not set window icon", exc_info=True)
         
         # Grid Configuration
         self.grid_columnconfigure(0, weight=1)

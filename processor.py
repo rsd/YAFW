@@ -483,8 +483,8 @@ class VideoProcessorThread(threading.Thread):
                     if not os.path.exists(shim_path):
                         try:
                             os.symlink("/bin/true", shim_path)
-                        except OSError:
-                            pass
+                        except OSError as e:
+                            log.debug("Could not create xdg-open shim at %s: %s", shim_path, e)
                     headless_env["PATH"] = xdg_shim_dir + os.pathsep + headless_env.get("PATH", "")
 
                 self.process = subprocess.Popen(
@@ -512,7 +512,7 @@ class VideoProcessorThread(threading.Thread):
                                 overall_pct = int(pct * 0.05) # Map to 0-5%
                                 safe_update_progress(overall_pct, f"Analyzing audio volume: {pct:.1f}%")
                             except Exception:
-                                pass
+                                log.debug("Could not parse auto-editor progress line: %r", line)
                     elif "|" in line and "%" in line:
                         try:
                             pct_str = line.split("|")[2].split("%")[0].strip()
@@ -520,7 +520,7 @@ class VideoProcessorThread(threading.Thread):
                             overall_pct = 5 + int(pct * 0.25) # Map rendering cuts to 5-30%
                             safe_update_progress(overall_pct, f"Cutting silences and speedup: {pct:.1f}%")
                         except Exception:
-                            pass
+                            log.debug("Could not parse auto-editor progress line: %r", line)
 
                 self.process.wait()
 
@@ -622,7 +622,7 @@ class VideoProcessorThread(threading.Thread):
                             overall_pct = 30 + int(pass2_ratio * 68) # Map 30% to 98%
                             safe_update_progress(overall_pct, f"H.265 Encoding: {overall_pct}%")
                         except Exception:
-                            pass
+                            log.debug("Could not parse ffmpeg progress line: %r", line)
 
                 self.process.wait()
                 log.info("FFmpeg pass 2 exited with code %d", self.process.returncode)
@@ -730,7 +730,7 @@ class VideoProcessorThread(threading.Thread):
                             overall_pct = 10 + int(ratio * 88) # Map 10% to 98%
                             safe_update_progress(overall_pct, f"H.265 Encoding: {overall_pct}%")
                         except Exception:
-                            pass
+                            log.debug("Could not parse ffmpeg progress line: %r", line)
 
                 self.process.wait()
                 log.info("FFmpeg single-pass exited with code %d", self.process.returncode)
