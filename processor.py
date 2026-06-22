@@ -517,7 +517,7 @@ class VideoProcessorThread(threading.Thread):
                         try:
                             pct_str = line.split("|")[2].split("%")[0].strip()
                             pct = float(pct_str)
-                            overall_pct = 5 + int(pct * 0.65) # Map rendering cuts to 5-70%
+                            overall_pct = 5 + int(pct * 0.25) # Map rendering cuts to 5-30%
                             safe_update_progress(overall_pct, f"Cutting silences and speedup: {pct:.1f}%")
                         except Exception:
                             pass
@@ -535,14 +535,13 @@ class VideoProcessorThread(threading.Thread):
                 if not os.path.exists(temp_edited_path) or os.path.getsize(temp_edited_path) == 0:
                     self.progress_callback(0, "Error: Failed to generate intermediate edited video.")
                     return
-
                 # Get duration of intermediate video for exact encoding progress metrics
                 edited_duration = get_video_duration(temp_edited_path)
 
                 # Pass 2: Run FFmpeg to normalize audio (dynaudnorm) and compress to H.265 (libx265)
-                self.progress_callback(70, "Optimizing and encoding H.265 video...")
-                crf = self.config.get("crf", 26)
-                preset = self.config.get("preset", "medium")
+                self.progress_callback(30, "Optimizing and encoding H.265 video...")
+                crf = self.config.get("crf", 35)
+                preset = self.config.get("preset", "slow")
 
                 intro_enabled = self.config.get("intro_image_enabled", False)
                 intro_path = self.config.get("intro_image_path")
@@ -620,7 +619,7 @@ class VideoProcessorThread(threading.Thread):
                             
                             dur_limit = edited_duration if edited_duration > 0.0 else total_duration
                             pass2_ratio = min(1.0, max(0.0, current_sec / dur_limit))
-                            overall_pct = 70 + int(pass2_ratio * 28) # Map 70% to 98%
+                            overall_pct = 30 + int(pass2_ratio * 68) # Map 30% to 98%
                             safe_update_progress(overall_pct, f"H.265 Encoding: {overall_pct}%")
                         except Exception:
                             pass
@@ -670,8 +669,8 @@ class VideoProcessorThread(threading.Thread):
                 with open(fd_f, 'w', encoding="utf-8") as f:
                     f.write(filtergraph)
 
-                crf = self.config.get("crf", 26)
-                preset = self.config.get("preset", "medium")
+                crf = self.config.get("crf", 35)
+                preset = self.config.get("preset", "slow")
 
                 ffmpeg_cmd = [
                     "ffmpeg",
