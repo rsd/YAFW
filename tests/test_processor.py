@@ -5,7 +5,14 @@ import json
 import os
 import io
 
-from processor import get_video_duration, build_filtergraph, VideoProcessorThread
+from processor import (
+    get_video_duration,
+    build_filtergraph,
+    VideoProcessorThread,
+    _clip_speed,
+    _target_speed,
+    DEFAULT_SPEED,
+)
 
 # Safe side-effect wrapper for os.close to ignore mocked file descriptor 99
 # while keeping original closing functionality for other descriptors
@@ -52,6 +59,30 @@ class TestGetVideoDuration(unittest.TestCase):
         
         duration = get_video_duration("dummy_path.mp4")
         self.assertEqual(duration, 0.0)
+
+
+class TestClipSpeedHelpers(unittest.TestCase):
+    def test_clip_speed_no_effects(self):
+        self.assertEqual(_clip_speed({"effects": []}), 1.0)
+        self.assertEqual(_clip_speed({}), 1.0)
+
+    def test_clip_speed_with_speed_effect(self):
+        self.assertEqual(_clip_speed({"effects": ["speed:2.0"]}), 2.0)
+
+    def test_clip_speed_ignores_malformed_effect(self):
+        # Malformed speed effects fall back to 1.0 instead of raising.
+        self.assertEqual(_clip_speed({"effects": ["speed:abc"]}), 1.0)
+        self.assertEqual(_clip_speed({"effects": ["speed:"]}), 1.0)
+
+    def test_target_speed_speedup_disabled(self):
+        # Speedup off => always 1.0, even for clips with an explicit speed.
+        self.assertEqual(_target_speed(2.0, speed_up=False, speed_val=DEFAULT_SPEED), 1.0)
+
+    def test_target_speed_uses_global_when_clip_is_normal(self):
+        self.assertEqual(_target_speed(1.0, speed_up=True, speed_val=DEFAULT_SPEED), DEFAULT_SPEED)
+
+    def test_target_speed_keeps_explicit_clip_speed(self):
+        self.assertEqual(_target_speed(2.0, speed_up=True, speed_val=DEFAULT_SPEED), 2.0)
 
 
 class TestBuildFiltergraph(unittest.TestCase):
