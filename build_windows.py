@@ -192,9 +192,9 @@ def run_builds():
 
         # 2. Compile Windows Installer natively
         iscc_paths = [
-            r"C:\Users\raul\AppData\Local\Programs\Antigravity IDE\resources\app\node_modules\innosetup\bin\ISCC.exe",
+            shutil.which("ISCC"),
             r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-            shutil.which("ISCC")
+            r"C:\Program Files\Inno Setup 6\ISCC.exe",
         ]
         iscc_bin = None
         for path in iscc_paths:

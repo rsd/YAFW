@@ -2,7 +2,7 @@
 
 YAFW is a premium, lightweight desktop utility designed to optimize long-form talking-head videos, online lectures, and Zoom recordings. It automates silence cutting, speeds up video playback to 1.2x (preserving original audio pitch), normalizes varying audio levels, and compresses the final output using high-efficiency H.265 (HEVC) encoding.
 
-![YAFW GUI Concept Mockup](https://raw.githubusercontent.com/raul/YAFW/main/docs/mockup.png) *(Concept visualization from design phase)*
+![YAFW GUI Concept Mockup](https://raw.githubusercontent.com/rsd/YAFW/master/docs/mockup.png) *(Concept visualization from design phase)*
 
 ---
 
@@ -145,6 +145,6 @@ To solve this, YAFW automatically:
 
 ## Code Architecture
 
-- **[main.py](file:///home/raul/Devel/Utilities/YAFW/main.py)**: Application entry. Orchestrates safe event mapping and handles main window closing protocols.
-- **[ui.py](file:///home/raul/Devel/Utilities/YAFW/ui.py)**: CustomTkinter layout widgets and window behaviors.
-- **[processor.py](file:///home/raul/Devel/Utilities/YAFW/processor.py)**: Threaded file processing engine, timeline parser, and progress tracker.
+- **[main.py](main.py)**: Application entry. Orchestrates safe event mapping and handles main window closing protocols.
+- **[ui.py](ui.py)**: CustomTkinter layout widgets and window behaviors.
+- **[processor.py](processor.py)**: Threaded file processing engine, timeline parser, and progress tracker.
