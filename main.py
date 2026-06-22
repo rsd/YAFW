@@ -70,28 +70,35 @@ if __name__ == "__main__":
         bundled_bin = os.path.join(bundle_dir, ae_name)
         target_bin = os.path.join(ae_cache, "bin", ae_name)
 
-        # Pre-populate the cache if possible to skip download checks
-        if os.path.exists(bundled_bin):
+        def _sync_bundled_binary():
+            """
+            Copies the bundled auto-editor binary into the writable cache (only
+            when missing or stale) and returns its Path, or None if no bundled
+            binary is present. Single source for both the cache pre-population
+            and the download_binary monkeypatch below.
+            """
+            if not os.path.exists(bundled_bin):
+                return None
             os.makedirs(os.path.dirname(target_bin), exist_ok=True)
-            try:
-                if not os.path.exists(target_bin) or os.path.getsize(target_bin) != os.path.getsize(bundled_bin):
-                    shutil.copy2(bundled_bin, target_bin)
-                    if sys.platform != "win32":
-                        os.chmod(target_bin, 0o755)
-            except Exception:
-                pass
+            if not os.path.exists(target_bin) or os.path.getsize(target_bin) != os.path.getsize(bundled_bin):
+                shutil.copy2(bundled_bin, target_bin)
+                if sys.platform != "win32":
+                    os.chmod(target_bin, 0o755)
+            from pathlib import Path
+            return Path(target_bin)
+
+        # Pre-populate the cache if possible to skip download checks (best-effort).
+        try:
+            _sync_bundled_binary()
+        except Exception:
+            pass
 
         # Monkey-patch download_binary to copy and return the writable executable Path
         def _use_bundled_binary():
-            if os.path.exists(bundled_bin):
-                os.makedirs(os.path.dirname(target_bin), exist_ok=True)
-                if not os.path.exists(target_bin) or os.path.getsize(target_bin) != os.path.getsize(bundled_bin):
-                    shutil.copy2(bundled_bin, target_bin)
-                    if sys.platform != "win32":
-                        os.chmod(target_bin, 0o755)
-                from pathlib import Path
-                return Path(target_bin)
-            raise FileNotFoundError("Bundled auto-editor binary not found")
+            target = _sync_bundled_binary()
+            if target is None:
+                raise FileNotFoundError("Bundled auto-editor binary not found")
+            return target
 
         ae_mod.download_binary = _use_bundled_binary
 
