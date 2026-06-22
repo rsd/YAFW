@@ -1,4 +1,6 @@
 import os
+import sys
+import ctypes
 import tkinter as tk
 from tkinter import filedialog
 import customtkinter as ctk
@@ -36,8 +38,6 @@ class YafwApp(ctk.CTk):
         
         # Set Window Icon (topbar and taskbar on Windows)
         try:
-            import sys
-            import ctypes
             # Force Windows to associate the taskbar shortcut with this window explicitly
             if sys.platform == "win32":
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("yafw.videooptimizer.1.1")

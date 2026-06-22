@@ -27,18 +27,12 @@ def _setup_logging():
     log_dir = _get_log_dir()
     log_path = os.path.join(log_dir, "yafw.log")
 
-    # Clear log file on startup to prevent excessive growth
-    if os.path.exists(log_path):
-        try:
-            os.remove(log_path)
-        except OSError:
-            try:
-                with open(log_path, "w", encoding="utf-8") as f:
-                    f.truncate(0)
-            except OSError:
-                pass
-
-    handler = RotatingFileHandler(log_path, maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8")
+    # Start each session with a fresh log: mode="w" truncates the file on open,
+    # replacing the previous manual remove/truncate dance. The rotating handler
+    # still caps growth (with backups) within a single long-running session.
+    handler = RotatingFileHandler(
+        log_path, mode="w", maxBytes=2 * 1024 * 1024, backupCount=3, encoding="utf-8"
+    )
     handler.setFormatter(logging.Formatter(
         "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     ))
@@ -157,6 +151,26 @@ def get_image_scaling_filter(mode: str, w: int, h: int) -> str:
         # Use as is: Centered, padding unmatched margins or clipping overflow
         return f"[1:v]pad=w={w}:h={h}:x=(ow-iw)/2:y=(oh-ih)/2:color=black[img_prepped]"
 
+def _atempo_chain(speed):
+    """
+    Builds an ffmpeg atempo filter expression for an arbitrary tempo factor.
+
+    A single atempo only accepts factors in [0.5, 2.0], so larger/smaller
+    speeds are decomposed into a chain of factors that multiply to `speed`
+    (e.g. 2.5 -> "atempo=2.0000,atempo=1.2500"). For factors already in range
+    (the common 1.2x case) this returns a single "atempo=<speed>".
+    """
+    factors = []
+    remaining = float(speed)
+    while remaining > 2.0:
+        factors.append(2.0)
+        remaining /= 2.0
+    while remaining < 0.5:
+        factors.append(0.5)
+        remaining /= 0.5
+    factors.append(remaining)
+    return ",".join(f"atempo={f:.4f}" for f in factors)
+
 def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed_val=1.2, voice_boost=False, total_duration=0.0):
     """
     Parses the auto-editor .v3 timeline JSON and constructs the ffmpeg filtergraph.
@@ -171,7 +185,7 @@ def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed
         expected_output_duration = total_duration
         if speed_up and abs(speed_val - 1.0) > 1e-4:
             filter_parts.append(f"[0:v]setpts=PTS/{speed_val:.4f}[outv_raw]")
-            filter_parts.append(f"[0:a]atempo={speed_val:.4f}[outa_raw]")
+            filter_parts.append(f"[0:a]{_atempo_chain(speed_val)}[outa_raw]")
             video_out = "[outv_raw]"
             audio_out = "[outa_raw]"
             expected_output_duration = total_duration / speed_val
@@ -289,9 +303,9 @@ def build_filtergraph(timeline_json_path, cut_silence=True, speed_up=True, speed
 
         # Trim & speed stretch
         if abs(target_speed - 1.0) > 1e-4:
-            # Handle stretching with atempo (requires chaining if speed > 2.0, but 1.2 is fine)
+            # _atempo_chain handles speeds outside ffmpeg's single-filter [0.5, 2.0] range
             filter_parts.append(
-                f"[0:a]atrim=start={start_sec:.4f}:end={end_sec:.4f},asetpts=PTS-STARTPTS,atempo={target_speed:.4f}[a{i}]"
+                f"[0:a]atrim=start={start_sec:.4f}:end={end_sec:.4f},asetpts=PTS-STARTPTS,{_atempo_chain(target_speed)}[a{i}]"
             )
         else:
             filter_parts.append(
