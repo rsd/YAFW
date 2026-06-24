@@ -1,6 +1,6 @@
 import os
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 import customtkinter as ctk
 from version import __version__
 
@@ -575,11 +575,11 @@ class YafwApp(ctk.CTk):
 
     def on_optimize_clicked(self):
         if not self.selected_file_path:
-            tk.messagebox.showwarning("No File Selected", "Please select a video file to optimize.")
+            messagebox.showwarning("No File Selected", "Please select a video file to optimize.")
             return
             
         if self.intro_switch.get() and not self.intro_image_path:
-            tk.messagebox.showwarning("No Image Selected", "Please select an intro image or disable the intro image overlay.")
+            messagebox.showwarning("No Image Selected", "Please select an intro image or disable the intro image overlay.")
             return
             
         # Select output destination
@@ -608,7 +608,7 @@ class YafwApp(ctk.CTk):
         self.on_start_processing(self.selected_file_path, output_path, self.get_config())
 
     def on_cancel_clicked(self):
-        if tk.messagebox.askyesno("Cancel Processing", "Are you sure you want to stop processing?"):
+        if messagebox.askyesno("Cancel Processing", "Are you sure you want to stop processing?"):
             self.on_cancel_processing()
             self.set_processing_ui(False)
 
@@ -655,8 +655,8 @@ class YafwApp(ctk.CTk):
         # When complete or error, reset the UI
         if percent == 100 or (percent <= 0 and ("Error" in status_text or "failed" in status_text or "cancelled" in status_text or "Exception" in status_text)):
             if "Error" in status_text or "failed" in status_text or "cancelled" in status_text or "Exception" in status_text:
-                tk.messagebox.showerror("Processing Failed", status_text)
+                messagebox.showerror("Processing Failed", status_text)
             elif percent == 100:
-                tk.messagebox.showinfo("Optimization Complete", "Your optimized video has been exported successfully!")
+                messagebox.showinfo("Optimization Complete", "Your optimized video has been exported successfully!")
             
             self.set_processing_ui(False)
