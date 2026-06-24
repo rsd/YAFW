@@ -27,7 +27,11 @@ class YafwApp(ctk.CTk):
         self.selected_file_path = None
         self.intro_image_path = None
         self.advanced_visible = False
-        
+        # Tracks whether the user has ever opened the advanced panel. Once true,
+        # the advanced widgets govern config even after the panel is collapsed,
+        # so customized values aren't silently discarded.
+        self.advanced_used = False
+
         # Configure Main Window
         self.title("YAFW - Video Optimizer")
         self.geometry("640x700")
@@ -406,6 +410,7 @@ class YafwApp(ctk.CTk):
             self.advanced_frame.grid(row=6, column=0, sticky="ew", pady=(0, 16))
             self.advanced_header.configure(text="▲ Advanced Settings")
             self.advanced_visible = True
+            self.advanced_used = True
 
     def create_intro_image_section(self):
         # Frame containing intro image settings
@@ -531,8 +536,10 @@ class YafwApp(ctk.CTk):
         speed_up = bool(self.speed_switch.get())
         voice_boost = bool(self.boost_switch.get())
         
-        # Silence threshold and margin resolution
-        if self.advanced_visible:
+        # Silence threshold and margin resolution.
+        # If the user engaged the advanced panel at any point, its widgets win —
+        # even if it's currently collapsed — so customizations aren't lost.
+        if self.advanced_used:
             noise_threshold = self.thresh_entry.get().strip()
             crf = int(self.crf_slider.get())
             preset = self.adv_preset_menu.get()
